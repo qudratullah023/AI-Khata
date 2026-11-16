@@ -734,7 +734,7 @@ class MainActivity : FragmentActivity() {
                                 } else toast("No valid key was found. Paste one key per line.")
                             },
                             onDeleteApiKeys = {
-                                AlertDialog.Builder(this)
+                                AlertDialog.Builder(this@MainActivity)
                                     .setTitle("Remove AI keys?")
                                     .setMessage("Photo reading will be turned off until you add keys again.")
                                     .setNegativeButton("Cancel", null)
