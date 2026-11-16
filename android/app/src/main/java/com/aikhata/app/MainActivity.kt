@@ -116,6 +116,7 @@ class MainActivity : Activity() {
     }
 
     private fun datePickerButton(initialDate: String, onSelected: (String) -> Unit): TextView {
+        var currentDate = initialDate
         val label = text("Date: $initialDate", 15, green, true).apply {
             gravity = Gravity.CENTER
             background = rounded(Color.WHITE, 13, line)
@@ -123,12 +124,13 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                val parts = initialDate.split("-")
+                val parts = currentDate.split("-")
                 val year = parts.getOrNull(0)?.toIntOrNull() ?: 2026
                 val month = (parts.getOrNull(1)?.toIntOrNull() ?: 1) - 1
                 val day = parts.getOrNull(2)?.toIntOrNull() ?: 1
                 DatePickerDialog(this@MainActivity, { _, y, m, d ->
                     val chosen = String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
+                    currentDate = chosen
                     text = "Date: $chosen"
                     onSelected(chosen)
                 }, year, month, day).show()
@@ -138,6 +140,7 @@ class MainActivity : Activity() {
     }
 
     private fun monthPickerButton(initialMonth: String, onSelected: (String) -> Unit): TextView {
+        var currentMonth = initialMonth
         return text("Month: $initialMonth", 15, green, true).apply {
             gravity = Gravity.CENTER
             background = rounded(Color.WHITE, 13, line)
@@ -145,11 +148,12 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                val parts = initialMonth.split("-")
+                val parts = currentMonth.split("-")
                 val year = parts.getOrNull(0)?.toIntOrNull() ?: 2026
                 val month = (parts.getOrNull(1)?.toIntOrNull() ?: 1) - 1
                 DatePickerDialog(this@MainActivity, { _, y, m, _ ->
                     val chosen = String.format(Locale.US, "%04d-%02d", y, m + 1)
+                    currentMonth = chosen
                     text = "Month: $chosen"
                     onSelected(chosen)
                 }, year, month, 1).show()
@@ -675,7 +679,7 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(-1).setOnClickListener {
-                val value = amount.text.toString().toDoubleOrNull()
+                val value = parseAmount(amount.text.toString())
                 val day = date.text.toString().trim()
                 if (value == null || value <= 0 || !value.isFinite() || !validDate(day)) {
                     toast("Enter a valid amount and date.")
