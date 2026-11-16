@@ -986,7 +986,7 @@ class MainActivity : ComponentActivity() {
         button("Export a backup", { exportBackup() })
         button("Restore a backup", { importBackup() })
         gap(10)
-        root.addView(text("AI Khata · Version 2.2.0", 12, muted))
+        root.addView(text("AI Khata · Version 2.4.0", 12, muted))
     }
 
     private fun validDate(value: String): Boolean = LedgerMath.isValidDate(value)
@@ -1215,31 +1215,43 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAiFailure(error: Exception, photoBytes: ByteArray?, queuedFile: File?) {
+        val detail = error.message.orEmpty()
+        val lower = detail.lowercase(Locale.ROOT)
         val networkFailure = error is SocketTimeoutException || error is UnknownHostException ||
             error is ConnectException || !hasNetworkConnection()
         val message = when {
-            networkFailure -> "AI Khata could not reach the internet service."
-            error.message?.contains("401") == true || error.message?.contains("403") == true ->
-                "The optional personal AI key is not valid or does not have permission."
-            error.message?.contains("429") == true ->
+            networkFailure -> "AI Khata could not reach the internet service. Check your connection."
+            lower.contains("timeout") || lower.contains("took too long") ->
+                "The AI service took too long to respond. Please try again."
+            lower.contains("quota") || lower.contains("usage limit") || lower.contains("429") ->
                 "The AI service has reached its usage limit. Please try again later."
-            error.message?.contains("404") == true ->
-                "That AI model is not available. The app tried its fallback models."
-            error.message?.contains("503") == true ->
-                "The AI service is temporarily unavailable. Please try again."
-            else -> error.message ?: "The photo could not be read."
+            lower.contains("invalid") && lower.contains("key") ->
+                "The saved AI key is invalid. Check it in Advanced AI settings."
+            lower.contains("model") && lower.contains("unavailable") ->
+                "The selected AI models are unavailable. The service needs a model update."
+            lower.contains("no entries") || lower.contains("empty response") ->
+                "The AI could not find clear entries. Try a brighter, closer photo."
+            else -> detail.ifBlank { "The photo could not be read. Try a clearer picture." }
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Photo reading failed")
-            .setMessage(message + if (queuedFile != null) "\n\nYour saved photo is still waiting. You can retry it later." else "")
+            .setMessage(
+                message + if (queuedFile != null) {
+                    "\n\nYour saved photo is safe. You can retry it when the service is ready."
+                } else ""
+            )
             .setNegativeButton("Close", null)
-        if (queuedFile != null) {
-            dialog.setPositiveButton("Retry") { _, _ -> processNextQueuedPhoto() }
-        } else if (photoBytes != null) {
-            dialog.setPositiveButton("Save for later") { _, _ ->
-                saveQueuedPhoto(photoBytes)
-                toast("Photo saved. You can retry it from the home screen.")
-                showHome()
+
+        if (photoBytes != null) {
+            dialog.setPositiveButton("Retry now") { _, _ ->
+                runAiExtractionBytes(photoBytes, queuedFile)
+            }
+            if (queuedFile == null) {
+                dialog.setNeutralButton("Save for later") { _, _ ->
+                    saveQueuedPhoto(photoBytes)
+                    toast("Photo saved. You can retry it from the home screen.")
+                    showHome()
+                }
             }
         }
         dialog.show()
