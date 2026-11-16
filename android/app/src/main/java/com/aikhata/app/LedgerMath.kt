@@ -1,5 +1,7 @@
 package com.aikhata.app
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -13,6 +15,7 @@ object LedgerMath {
             }
         }.joinToString("")
             .replace(",", "")
+            .replace("،", "")
             .replace("٬", "")
             .replace("٫", ".")
             .replace(Regex("\\s+"), "")
@@ -21,6 +24,17 @@ object LedgerMath {
         return amount.takeIf {
             it.isFinite() && it > 0.0 && it <= 9_000_000_000_000.0
         }
+    }
+
+    fun toPaisa(amount: Double): Long {
+        require(amount > 0.0 && amount.isFinite() && amount <= 9_000_000_000_000.0) {
+            "Enter a positive amount within the supported limit."
+        }
+        return BigDecimal.valueOf(amount)
+            .movePointRight(2)
+            .setScale(0, RoundingMode.HALF_UP)
+            .longValueExact()
+            .also { require(it > 0L) { "The amount is too small." } }
     }
 
     fun calculateBalance(creditPaisa: Long, paymentPaisa: Long): Long =
