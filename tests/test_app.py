@@ -245,7 +245,7 @@ class AIKhataTests(unittest.TestCase):
             "CREATE TABLE transactions_new (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL, description TEXT NOT NULL, amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)"
         )
         db.execute(
-            "INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, CAST(ROUND(amount * 100) AS INTEGER), created_at FROM transactions WHERE amount > 0"
+            "INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, MAX(1, CAST(ROUND(amount * 100) AS INTEGER)), created_at FROM transactions WHERE amount > 0"
         )
         db.execute("DROP TABLE transactions")
         db.execute("ALTER TABLE transactions_new RENAME TO transactions")
