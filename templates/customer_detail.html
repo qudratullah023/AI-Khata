@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ customer.name }}{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('customers') }}">Customers</a><span>›</span><span>{{ customer.name }}</span></div>
+<div class="page-heading customer-title"><div><div class="eyebrow">CUSTOMER ACCOUNT</div><h1>{{ customer.name }}</h1><p class="muted">{{ customer.phone or 'No phone number saved' }}</p></div><div class="balance-card"><small>CURRENT BALANCE</small><strong>{{ balance|money }}</strong><span>{{ 'Customer owes the shop' if balance > 0 else 'Account is settled' if balance == 0 else 'Shop owes customer' }}</span></div></div>
+<div class="mini-stat-grid"><div class="mini-stat"><small>Total credit</small><strong>{{ credit_total|money }}</strong></div><div class="mini-stat"><small>Payments received</small><strong>{{ payment_total|money }}</strong></div><div class="mini-stat"><small>Transactions</small><strong>{{ history|length }}</strong></div></div>
+<div class="content-grid detail-grid">
+  <section class="panel"><div class="panel-heading"><div><h2>Account history</h2><p class="muted">All recorded credits and payments</p></div></div>
+    {% if history %}<div class="table-wrap"><table><thead><tr><th>Date</th><th>Entry</th><th>Type</th><th class="align-right">Amount</th><th></th></tr></thead><tbody>
+    {% for row in history %}<tr><td class="nowrap">{{ row.transaction_date|date_display }}</td><td><strong>{{ row.description or 'Ledger entry' }}</strong></td><td><span class="type-pill {{ 'pill-credit' if row.transaction_type == 'credit' else 'pill-payment' }}">{{ 'Credit' if row.transaction_type == 'credit' else 'Payment' }}</span></td><td class="align-right amount-{{ row.transaction_type }}">{{ '+' if row.transaction_type == 'credit' else '−' }}{{ row.amount|money }}</td><td><form method="post" action="{{ url_for('transaction_delete', transaction_id=row.id) }}" onsubmit="return confirm('Delete this transaction? The balance will be recalculated.')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="delete-button" aria-label="Delete transaction" title="Delete">×</button></form></td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="empty-state"><span class="empty-icon">▤</span><strong>No entries recorded</strong><p>Add a credit or payment using the form.</p></div>{% endif %}
+  </section>
+  <aside class="panel add-panel"><div class="panel-heading"><div><h2>New transaction</h2><p class="muted">Update this customer's khata</p></div></div>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Entry type<select name="transaction_type"><option value="credit">Credit — customer owes shop</option><option value="payment">Payment — money received</option></select></label>
+      <label>Amount (PKR)<input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required></label>
+      <label>Date<input name="transaction_date" type="date" value="{{ today }}" required></label>
+      <label>Description<input name="description" maxlength="240" placeholder="e.g. Grocery items"></label>
+      <button class="button button-primary button-full" type="submit">Save transaction <span>→</span></button>
+    </form>
+    <div class="inline-note">Credit increases what the customer owes. A payment reduces the balance.</div>
+  </aside>
+</div>
+{% endblock %}
