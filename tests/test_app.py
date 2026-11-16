@@ -204,7 +204,7 @@ class AIKhataTests(unittest.TestCase):
 
     def test_gemini_key_list_splits_commas_semicolons_and_newlines(self):
         with patch.dict(os.environ, {
-            "GEMINI_API_KEYS": "first-key; second-key\\nthird-key",
+            "GEMINI_API_KEYS": "first-key; second-key\nthird-key",
             "GEMINI_API_KEY": "fourth-key",
         }, clear=False):
             keys = khata.gemini_api_keys()
