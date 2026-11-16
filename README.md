@@ -1,89 +1,39 @@
-# AI Khata
+# AI Khata — Offline-first Android ledger
 
-AI Khata is a mobile-first digital khata for small shops. The shopkeeper can manage customer balances, record credit and repayments, review monthly summaries, and optionally extract draft transactions from a photograph of a handwritten ledger using a vision AI provider.
+AI Khata is a shop ledger designed to work on the phone without a web host, account, subscription or continuous internet connection.
 
-## What is included
+## How it works
 
-- Private first-run shopkeeper account, PIN/password hashing, lock/logout, CSRF protection and temporary login throttling.
-- Customer accounts with phone details, searchable list and individual transaction history.
-- Credit and payment recording with automatic outstanding-balance calculations.
-- Monthly activity reports and dashboard summaries.
-- Optional Gemini or OpenRouter image extraction. The app shows editable draft rows; it never saves an AI result until the shopkeeper confirms it.
-- Light/dark theme and responsive desktop/mobile web interface.
-- Android WebView app shell with camera/gallery file selection.
-- Automated backend regression tests and GitHub Actions debug-APK build.
+- Local database: customer records, credit, repayments, balances and reports are stored in a private SQLite database inside the Android app.
+- Offline use: creating customers, recording sales/credit, recording payments, viewing balances and reports do not need internet.
+- Shopkeeper lock: first launch creates a local PIN. The PIN is stored as a salted PBKDF2 hash, not readable text.
+- Optional AI: when the shopkeeper chooses a ledger photo, that image is sent to Google Gemini over the internet. The AI result is only a draft; the shopkeeper reviews and confirms it before entries are saved locally.
+- AI key: the Gemini API key is encrypted using Android Keystore before it is saved on the phone.
+- No cloud database: there is no Render, Flask server, hosted website or remote database in the Android app.
 
-## Run locally
+## Build the Android app
 
-1. Install Python 3.11 or newer.
-2. Create and activate a virtual environment: `python -m venv .venv`.
-3. Install packages: `pip install -r requirements.txt`.
-4. Set environment variables from `.env.example`. At minimum, create a long random `SECRET_KEY`. AI API keys are optional.
-5. Start the web app: `python app.py`.
-6. Open `http://127.0.0.1:5000`. On first launch, create the shopkeeper account.
+Open GitHub → Actions → AI Khata checks and Android APK. The workflow runs the Python backend regression tests (kept for the web/demo edition), builds the Android app and uploads app-debug.apk as ai-khata-debug-apk.
 
-Run automated tests with:
+The Android project is in android/. The app supports Android 6.0+ and is suitable for Android 10. No URL or hosting setup is required.
 
-```bash
-python -m unittest discover -s tests -v
-```
+## Local data and backup
 
-## Shopkeeper security
+The SQLite database lives in the app's private internal storage. Other ordinary apps cannot directly read it. Uninstalling AI Khata or clearing its app storage deletes the local records. Keep a regular backup before changing phones or uninstalling. A backup/export and restore screen is a recommended next feature.
 
-- First-run setup creates the single owner account. Public sign-up is disabled after setup.
-- The shopkeeper signs in with a username and a PIN of at least 6 digits or a password of at least 8 characters.
-- Credentials are stored as a one-way Werkzeug password hash, never as readable plain text.
-- Five incorrect attempts within the sign-in window temporarily block further attempts from that IP.
-- Forms and write APIs require a per-session CSRF token.
-- Private pages and APIs require an active owner session. API clients receive a JSON 401 response when the session is locked or expired.
-- Session cookies are HTTP-only and SameSite=Lax. Sessions expire after 12 hours of inactivity.
-- The Lock button ends the current session.
+The app currently stores the shop name, customers, transaction history and PIN hash locally. It does not automatically sync between multiple phones. If the phone is lost or damaged, data is not recoverable unless a backup has been made.
 
-This is application-level access control, not a substitute for a phone screen lock or a professional production security review. Use HTTPS and a strong persistent `SECRET_KEY`. Anyone with direct access to the server or database file may still access stored data.
+## Optional AI setup
 
-## AI handwriting reader
+Add a Gemini API key in Settings & AI key. Without a key, the app remains a complete manual ledger and works offline. Internet is only used when the user deliberately runs AI photo extraction. The selected image and prompt are sent to Google Gemini; ledger records remain on the phone. AI availability, model names, free quotas and pricing are controlled by Google and can change.
 
-AI scanning is optional. Manual customer and ledger features work without an AI key.
+## Web/classroom edition
 
-For Gemini, configure `AI_PROVIDER=gemini` and `GEMINI_API_KEY`. You can set `GEMINI_MODEL` to a currently available vision-capable model.
+The root app.py, Flask templates and Python tests are retained as a separate web demonstration. The Android APK does not use that backend. The mobile app's ledger database is native Android SQLite.
 
-For OpenRouter, configure `AI_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` to a vision-capable model available to your account. Free model availability, pricing and rate limits can change.
+## Presentation explanation
 
-API keys stay in the server environment and are never sent to the browser or included in the APK. The server checks that an uploaded file is actually a supported image, even if its filename or MIME type claims otherwise. The shopkeeper must review and confirm extracted fields before anything is written to the ledger.
-
-## Deploy the web service
-
-1. In Render, choose **New → Blueprint**, connect this GitHub repository and apply `render.yaml`.
-2. Wait for the service to finish deploying and open its HTTPS URL.
-3. Add the required environment values in Render. Keep the generated `SECRET_KEY`; add an AI key only when photo extraction is required.
-4. Set `APP_PUBLIC_URL` to the actual HTTPS service URL.
-5. Open the service and create the shopkeeper account.
-
-**Storage warning:** the included SQLite database is intended for local development and a controlled classroom demonstration. Free web-host instances commonly have ephemeral filesystems, so records may be lost when an instance is replaced or restarted. Do not use this deployment as the permanent ledger for a real shop. Before real use, move the database to managed persistent storage (preferably a managed relational database), configure backups, and test restoration.
-
-## Android APK
-
-The Android project is in `android/`. It is a WebView client for the hosted Flask app; the APK does not contain the Python server, the database or any AI API key. It requires an internet connection and a deployed HTTPS backend.
-
-The GitHub Actions workflow **AI Khata checks and Android APK**:
-- Runs the Python regression tests.
-- Compiles a debug APK.
-- Uploads `app-debug.apk` as the artifact `ai-khata-debug-apk`.
-
-After the workflow succeeds, open the repository's **Actions** tab, open the latest run, then download the **ai-khata-debug-apk** artifact. The APK can be installed on Android 6.0 or newer, including Android 10.
-
-To build the APK for a different hosted URL, set the repository Actions variable `WEB_APP_URL` to the deployed HTTPS URL, or manually run the workflow and supply `web_app_url`. The default URL in the build configuration is `https://ai-khata.onrender.com`; it will only work after a service is actually deployed at that address. A successful APK compilation by itself does not mean the web backend or AI provider has been deployed.
-
-## University presentation
-
-See [docs/PRESENTATION_GUIDE.md](docs/PRESENTATION_GUIDE.md) for the problem statement, architecture, presentation flow and plain-language explanations of the technologies.
-
-Student names, registration numbers, university and supervisor details are left as placeholders until the team confirms the correct details.
-
-## Credits
-
-Student developers: To be added after confirmation.
-
-University / department: To be added after confirmation.
-
-© 2026 AI Khata. All rights reserved by the project team, subject to the final ownership agreement.
+- Kotlin: the Android app screens and app logic.
+- SQLite: stores the shop's customers and ledger entries locally.
+- PBKDF2 + Android Keystore: protects the shop PIN and locally saved AI key.
+- Gemini API: optional online handwriting recognition, only when the user chooses to scan.
