@@ -1,0 +1,67 @@
+package com.aikhata.app
+
+import android.content.ContentValues
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
+
+data class CustomerRow(val id: Long, val name: String, val phone: String, val balance: Double)
+data class TransactionRow(val id: Long, val date: String, val type: String, val description: String, val amount: Double)
+
+class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_local.db", null, 1) {
+    override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE owner (id INTEGER PRIMARY KEY CHECK(id=1), shop_name TEXT NOT NULL, pin_salt TEXT NOT NULL, pin_hash TEXT NOT NULL, created_at TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK(transaction_type IN ('credit','payment')), description TEXT NOT NULL DEFAULT '', amount REAL NOT NULL CHECK(amount > 0), created_at TEXT NOT NULL)")
+        db.execSQL("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
+    }
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    fun isSetUp() = readableDatabase.rawQuery("SELECT 1 FROM owner WHERE id=1", null).use { it.moveToFirst() }
+    fun createOwner(shop: String, pin: String) {
+        val salt=ByteArray(16).also { SecureRandom().nextBytes(it) }
+        val v=ContentValues().apply { put("id",1); put("shop_name",shop); put("pin_salt",salt.hex()); put("pin_hash",derive(pin,salt).hex()); put("created_at",now()) }
+        writableDatabase.insertOrThrow("owner",null,v)
+    }
+    fun verifyPin(pin:String):Boolean = readableDatabase.rawQuery("SELECT pin_salt,pin_hash FROM owner WHERE id=1",null).use {
+        if(!it.moveToFirst()) false else MessageDigest.isEqual(it.getString(1).unhex(),derive(pin,it.getString(0).unhex()))
+    }
+    fun changePin(pin:String) {
+        val salt=ByteArray(16).also { SecureRandom().nextBytes(it) }
+        writableDatabase.execSQL("UPDATE owner SET pin_salt=?,pin_hash=? WHERE id=1",arrayOf(salt.hex(),derive(pin,salt).hex()))
+    }
+    fun shopName()=readableDatabase.rawQuery("SELECT shop_name FROM owner WHERE id=1",null).use { if(it.moveToFirst()) it.getString(0) else "My shop" }
+    fun updateShopName(name:String){writableDatabase.execSQL("UPDATE owner SET shop_name=? WHERE id=1",arrayOf(name))}
+    fun addCustomer(name:String,phone:String):Long {
+        val v=ContentValues().apply { put("name",name.trim());put("phone",phone.trim());put("created_at",now()) }
+        return writableDatabase.insertOrThrow("customers",null,v)
+    }
+    fun customers(query:String=""):List<CustomerRow> =
+        readableDatabase.rawQuery("""SELECT c.id,c.name,c.phone,
+        COALESCE(SUM(CASE WHEN t.transaction_type='credit' THEN t.amount ELSE -t.amount END),0)
+        FROM customers c LEFT JOIN transactions t ON t.customer_id=c.id
+        WHERE c.name LIKE ? OR c.phone LIKE ? GROUP BY c.id ORDER BY c.name COLLATE NOCASE""",
+        arrayOf("%"+query+"%","%"+query+"%")).use { c ->
+            buildList { while(c.moveToNext()) add(CustomerRow(c.getLong(0),c.getString(1),c.getString(2),c.getDouble(3))) }
+        }
+    fun customer(id:Long)=customers().firstOrNull{it.id==id}
+    fun addTransaction(id:Long,type:String,amount:Double,description:String,date:String) {
+        require(type=="credit"||type=="payment");require(amount>0&&amount.isFinite())
+        val v=ContentValues().apply { put("customer_id",id);put("transaction_date",date);put("transaction_type",type);put("description",description.trim());put("amount",amount);put("created_at",now()) }
+        writableDatabase.insertOrThrow("transactions",null,v)
+    }
+    fun transactions(id:Long):List<TransactionRow> =
+        readableDatabase.rawQuery("SELECT id,transaction_date,transaction_type,description,amount FROM transactions WHERE customer_id=? ORDER BY transaction_date DESC,id DESC",arrayOf(id.toString())).use { c ->
+            buildList { while(c.moveToNext()) add(TransactionRow(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getDouble(4))) }
+        }
+    fun totals():Triple<Double,Double,Int> = readableDatabase.rawQuery("SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0),COUNT(*) FROM transactions",null).use { it.moveToFirst();Triple(it.getDouble(0),it.getDouble(1),it.getInt(2)) }
+    fun monthTotals(month:String):Pair<Double,Double> = readableDatabase.rawQuery("SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0) FROM transactions WHERE substr(transaction_date,1,7)=?",arrayOf(month)).use { it.moveToFirst();Pair(it.getDouble(0),it.getDouble(1)) }
+    private fun derive(pin:String,salt:ByteArray)=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(pin.toCharArray(),salt,120000,256)).encoded
+    private fun ByteArray.hex()=joinToString(""){"%02x".format(it)}
+    private fun String.unhex()=chunked(2).map{it.toInt(16).toByte()}.toByteArray()
+    private fun now()=java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",java.util.Locale.US).format(java.util.Date())
+}
