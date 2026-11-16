@@ -90,8 +90,10 @@ fun ReportsScreen(
                             placeholder = { Text("2026-11") }
                         )
                         Button(onClick = {
-                            if (validMonth(monthText)) viewModel.load(monthText)
-                            else monthError = "Enter a month as YYYY-MM, for example 2026-11."
+                            if (validMonth(monthText)) {
+                                monthError = null
+                                viewModel.load(monthText)
+                            } else monthError = "Enter a month as YYYY-MM, for example 2026-11."
                         }) { Text("Apply") }
                     }
                     if (monthError != null) {
@@ -232,7 +234,8 @@ private fun MetricCard(
 
 private fun validMonth(value: String): Boolean {
     if (!Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(value)) return false
-    return value.substring(0, 4).toIntOrNull() in 1900..9999
+    val year = value.substring(0, 4).toIntOrNull() ?: return false
+    return year in 1900..9999
 }
 
 private fun money(value: Double): String {
