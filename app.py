@@ -549,8 +549,8 @@ def api_extract():
     if len(image_bytes) > MAX_UPLOAD_BYTES:
         return jsonify({"error": "The image is larger than 10 MB."}), 413
     signatures = {
-        "image/jpeg": image_bytes.startswith(b"\\xff\\xd8\\xff"),
-        "image/png": image_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n"),
+        "image/jpeg": image_bytes.startswith(b"\xff\xd8\xff"),
+        "image/png": image_bytes.startswith(b"\x89PNG\r\n\x1a\n"),
         "image/webp": len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP",
     }
     if not signatures.get(mime_type, False):
