@@ -19,6 +19,14 @@ class LedgerMathTest {
         assertEquals(1200.0, LedgerMath.parseAmount("۱۲\u06f0۰")!!, 0.001)
         assertEquals(1200.0, LedgerMath.parseAmount("١٢٠٠")!!, 0.001)
         assertEquals(1200.50, LedgerMath.parseAmount("۱٬۲۰۰٫۵۰")!!, 0.001)
+        assertEquals(1200.0, LedgerMath.parseAmount("١،٢٠٠")!!, 0.001)
+    }
+
+    @Test
+    fun convertsRupeesToIntegerPaisaWithHalfUpRounding() {
+        assertEquals(100L, LedgerMath.toPaisa(1.00))
+        assertEquals(101L, LedgerMath.toPaisa(1.005))
+        assertEquals(123450L, LedgerMath.toPaisa(1234.50))
     }
 
     @Test
