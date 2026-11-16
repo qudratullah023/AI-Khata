@@ -221,12 +221,16 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         require(type == "credit" || type == "payment")
         require(amount > 0 && amount.isFinite())
         require(LedgerMath.isValidDate(date))
-        val isProductSale = productId != null || quantity != null || unitCost != null
-        require(!isProductSale || (type == "credit" && productId != null && quantity != null &&
-            unitCost != null && unitCost >= 0.0 && unitCost.isFinite())) {
+        val hasSaleSnapshot = productId != null || quantity != null || unitCost != null
+        require(!hasSaleSnapshot || (type == "credit" && quantity != null && unitCost != null &&
+            unitCost >= 0.0 && unitCost.isFinite())) {
             "The product sale details are incomplete."
         }
-        if (!isProductSale) {
+        val quantityMilli = if (hasSaleSnapshot) toMilli(quantity!!, allowZero = false) else null
+        val unitCostPaisa = if (hasSaleSnapshot) toPaisaNonNegative(unitCost!!) else null
+
+        val db = writableDatabase
+        if (productId == null) {
             val values = ContentValues().apply {
                 put("customer_id", id)
                 put("transaction_date", date)
@@ -234,19 +238,21 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
                 put("description", description.trim())
                 put("amount_paisa", toPaisa(amount))
                 put("created_at", now())
+                if (quantityMilli != null && unitCostPaisa != null) {
+                    put("quantity_milli", quantityMilli)
+                    put("unit_cost_paisa", unitCostPaisa)
+                }
             }
-            writableDatabase.insertOrThrow("transactions", null, values)
+            db.insertOrThrow("transactions", null, values)
             return
         }
 
-        val quantityMilli = toMilli(quantity!!, allowZero = false)
-        val unitCostPaisa = toPaisaNonNegative(unitCost!!)
-        val db = writableDatabase
+        require(quantityMilli != null && unitCostPaisa != null) { "The product sale details are incomplete." }
         db.beginTransaction()
         try {
             val stock = db.rawQuery(
                 "SELECT stock_milli FROM products WHERE id=?",
-                arrayOf(productId!!.toString())
+                arrayOf(productId.toString())
             ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
                 ?: throw IllegalArgumentException("The original product no longer exists.")
             require(stock >= quantityMilli) { "Not enough stock to restore this sale." }
@@ -273,7 +279,6 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
             db.endTransaction()
         }
     }
-
     fun updateTransaction(id: Long, amount: Double, description: String, date: String) {
         require(amount > 0 && amount.isFinite())
         val values = ContentValues().apply {
