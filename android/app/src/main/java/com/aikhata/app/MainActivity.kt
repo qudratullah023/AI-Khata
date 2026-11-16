@@ -864,7 +864,7 @@ class MainActivity : FragmentActivity() {
         dialog.setOnShowListener {
             dialog.getButton(-1).setOnClickListener {
                 val value = parseAmount(amount.text.toString())
-                val day = date.text.toString().trim()
+                val day = selectedDate
                 if (value == null || value <= 0 || !value.isFinite() || !validDate(day)) {
                     toast("Enter a valid amount and date.")
                 } else {
