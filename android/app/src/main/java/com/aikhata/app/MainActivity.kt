@@ -24,7 +24,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,7 +50,7 @@ import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private lateinit var db: KhataDatabase
     private lateinit var root: LinearLayout
     private var unlocked = false
