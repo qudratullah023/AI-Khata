@@ -1463,18 +1463,20 @@ class MainActivity : FragmentActivity() {
         useSuggestions: Boolean
     ) {
         try {
-            rows.forEach { item ->
-                val name = item.getString("name")
-                val exact = db.customers().firstOrNull { it.name.equals(name, true) }
-                val suggested = if (useSuggestions) suggestions[name] else null
-                val customerId = exact?.id ?: suggested?.id ?: db.addCustomer(name, "")
-                db.addTransaction(
-                    customerId,
-                    item.getString("type"),
-                    item.getDouble("amount"),
-                    item.getString("description"),
-                    item.getString("date")
-                )
+            db.inTransaction {
+                rows.forEach { item ->
+                    val name = item.getString("name")
+                    val exact = db.customers().firstOrNull { it.name.equals(name, true) }
+                    val suggested = if (useSuggestions) suggestions[name] else null
+                    val customerId = exact?.id ?: suggested?.id ?: db.addCustomer(name, "")
+                    db.addTransaction(
+                        customerId,
+                        item.getString("type"),
+                        item.getDouble("amount"),
+                        item.getString("description"),
+                        item.getString("date")
+                    )
+                }
             }
             queuedFile?.delete()
             toast("Entries added to your khata.")
