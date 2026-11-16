@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import com.aikhata.app.data.KhataRepository
 import com.aikhata.app.ui.home.HomeDashboardScreen
+import com.aikhata.app.ui.business.BusinessManagementScreen
 import com.aikhata.app.ui.home.HomeViewModel
 import com.aikhata.app.ui.home.HomeViewModelFactory
 import com.aikhata.app.ui.customers.CustomersScreen
@@ -636,6 +637,7 @@ class MainActivity : FragmentActivity() {
                         route.startsWith("customer/") -> "customer"
                         route.startsWith("reports/") -> "reports"
                         route == "settings" -> "settings"
+                        route == "business" -> "business"
                         else -> "home"
                     }
                 }
@@ -680,6 +682,7 @@ class MainActivity : FragmentActivity() {
                             onCustomers = { navController.navigate("customers") },
                             onAddCustomer = { addCustomerDialog() },
                             onReports = { navController.navigate("reports/" + today().take(7)) },
+                            onBusiness = { navController.navigate("business") },
                             onScan = { chooseImage() },
                             onSettings = { navController.navigate("settings") },
                             onLock = {
@@ -729,6 +732,12 @@ class MainActivity : FragmentActivity() {
                             viewModel = reportsViewModel,
                             onBack = { if (!navController.popBackStack()) showHome() },
                             onShareReport = { shareMonthlyReport(it) }
+                        )
+                    }
+                    composable("business") {
+                        BusinessManagementScreen(
+                            database = db,
+                            onBack = { if (!navController.popBackStack()) showHome() }
                         )
                     }
                     composable("settings") {

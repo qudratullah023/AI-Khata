@@ -83,7 +83,7 @@ class KhataDatabaseMigrationTest {
             0,
             migrated.rawQuery("PRAGMA foreign_key_check", null).use { it.count }
         )
-        assertEquals(2, migrated.version)
+        assertEquals(3, migrated.version)
 
         helper.close()
         context.deleteDatabase("ai_khata_local.db")

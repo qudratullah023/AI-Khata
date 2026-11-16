@@ -43,3 +43,16 @@ To build the APK, open GitHub → Actions → **AI Khata checks and Android APK*
 - The Gemini API is used only for optional handwritten-ledger photo reading, with multi-key and multi-model fallback.
 
 The Python/Flask files in the repository are retained as a separate classroom/web demonstration. The Android APK does not depend on that backend.
+
+
+## Part 5 — Inventory, expenses and profitability (v2.7.0)
+
+The Android app now includes an offline business workspace with three sections:
+
+- **Inventory:** create and edit products, track SKU/unit, purchase and selling prices, opening/current stock, low-stock thresholds, manual stock corrections, and record a customer sale. A recorded inventory sale creates a customer credit entry and deducts stock in one SQLite transaction. Failed or over-stock sales do not create a ledger entry.
+- **Expenses:** record, edit and delete dated shop expenses by category, with notes.
+- **Profit & loss:** monthly tracked product revenue, cost of goods sold captured at the time of each sale, gross profit, recorded operating expenses, estimated net profit, current inventory value and low-stock count.
+
+The calculation deliberately distinguishes cash collection from revenue. A customer payment settles an earlier balance and is not counted as a second sale. Older/manual credit entries without a saved product cost are excluded from this tracked-product profit estimate, so the estimate does not pretend to know their cost.
+
+The local database upgrades to schema version 3 without discarding existing customer or transaction records. Password-protected backups now include products, expenses and product-sale cost snapshots; older version-1 backups remain restorable (they do not contain inventory or expense data).
