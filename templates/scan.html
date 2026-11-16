@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Scan a khata{% endblock %}
+{% block head %}<script defer src="{{ url_for('static', filename='js/scan.js') }}"></script>{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">HANDWRITTEN TO DIGITAL</div><h1>Scan a khata page</h1><p class="muted">Turn a photo of a handwritten ledger or bill into entries you can review.</p></div><span class="ai-chip">✳ AI ASSISTED</span></div>
+<div class="scan-layout">
+<section class="panel scan-panel">
+<div class="step-line"><span class="step-number">01</span><div><h2>Choose a clear photo</h2><p class="muted">Keep the page flat, bright and in focus. JPG, PNG or WebP, up to 10 MB.</p></div></div>
+<form id="scan-form" class="upload-zone">
+<input id="ledger-image" type="file" name="ledger_image" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+<label for="ledger-image" class="upload-action"><span class="upload-icon">▧</span><strong>Take a photo or choose a file</strong><small>Tap to open your camera or gallery</small><span class="button button-secondary button-small">Choose photo</span></label>
+<div id="image-preview-wrap" class="image-preview-wrap" hidden><img id="image-preview" alt="Selected ledger page preview"><div><strong id="image-filename"></strong><small id="image-filesize"></small><button id="remove-image" class="text-button" type="button">Remove photo</button></div></div>
+<button id="extract-button" class="button button-primary button-full" type="submit" disabled>Read handwriting with AI <span>→</span></button>
+</form>
+<div id="scan-status" class="scan-status" aria-live="polite"></div>
+{% if not ai_ready %}<div class="inline-note warning-note"><strong>AI connection not configured yet.</strong><br>The rest of the ledger works normally. Add a Gemini or OpenRouter key to the server environment to enable photo reading.</div>{% else %}<div class="inline-note">Connected provider: <strong>{{ ai_provider|capitalize }}</strong>. The photo is sent securely to the configured provider for processing. Avoid uploading pages containing sensitive details you do not have permission to process.</div>{% endif %}
+</section>
+<section class="panel scan-how"><div class="step-line"><span class="step-number">02</span><div><h2>Review before saving</h2><p class="muted">AI can misread handwriting. You stay in control of every number.</p></div></div>
+<div class="how-list"><div><span>1</span><p><strong>AI reads the page</strong><small>Names, dates, notes and amounts are suggested.</small></p></div><div><span>2</span><p><strong>You check each row</strong><small>Correct names, figures or transaction types.</small></p></div><div><span>3</span><p><strong>Confirm to save</strong><small>Only confirmed rows become ledger records.</small></p></div></div>
+<div class="trust-note"><span>✓</span><p><strong>No automatic financial changes</strong><small>Extracted data is only a draft until you confirm it.</small></p></div></section>
+</div>
+<section id="review-panel" class="panel review-panel" hidden>
+<div class="panel-heading"><div><div class="eyebrow">03 · CHECK YOUR ENTRIES</div><h2>Review extracted entries</h2><p class="muted">Correct anything that does not match the paper before saving.</p></div><span id="entry-count" class="count-chip">0 entries</span></div>
+<div class="table-wrap"><table class="review-table"><thead><tr><th>Customer</th><th>Date</th><th>Description</th><th>Type</th><th>Amount (Rs.)</th><th></th></tr></thead><tbody id="review-rows"></tbody></table></div>
+<div class="review-actions"><button id="cancel-review" class="button button-secondary" type="button">Discard</button><button id="save-entries" class="button button-primary" type="button">Confirm & save entries →</button></div>
+</section>
+{% endblock %}
