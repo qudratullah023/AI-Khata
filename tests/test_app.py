@@ -173,7 +173,9 @@ class AIKhataTests(unittest.TestCase):
         self.assertFalse(khata.check_password_hash(changed["password_hash"], "123456"))
 
     def test_mobile_ai_endpoint_uses_server_key_and_rate_limits_install(self):
-        khata._mobile_requests.clear()
+        with khata.app.app_context():
+            khata.get_db().execute("DELETE FROM mobile_ai_requests")
+            khata.get_db().commit()
         previous_limit = khata.MOBILE_RATE_LIMIT_PER_HOUR
         khata.MOBILE_RATE_LIMIT_PER_HOUR = 1
         image = bytes([255, 216, 255]) + b"test-image-payload"
@@ -200,7 +202,6 @@ class AIKhataTests(unittest.TestCase):
                 self.assertEqual(second.status_code, 429)
         finally:
             khata.MOBILE_RATE_LIMIT_PER_HOUR = previous_limit
-            khata._mobile_requests.clear()
 
     def test_gemini_key_list_splits_commas_semicolons_and_newlines(self):
         with patch.dict(os.environ, {
