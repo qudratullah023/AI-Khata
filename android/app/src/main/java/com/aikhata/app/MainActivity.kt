@@ -17,7 +17,7 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Base64
+import android.util.Base64
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
@@ -177,9 +177,9 @@ class MainActivity : Activity() {
     val bytes=contentResolver.openInputStream(uri)!!.use{it.readBytes()};require(bytes.size<=10*1024*1024){"Image is too large (10 MB maximum)."}
     val mime=contentResolver.getType(uri)?: "image/jpeg";require(mime in listOf("image/jpeg","image/png","image/webp")){"Choose a JPG, PNG or WEBP image."}
     val prompt="Read this handwritten shop ledger. Return ONLY JSON with entries array. Each entry: customer_name, date YYYY-MM-DD, description, type credit or payment, amount number. Do not guess unreadable amounts; omit uncertain rows."
-    val parts=JSONArray().put(JSONObject().put("text",prompt)).put(JSONObject().put("inline_data",JSONObject().put("mime_type",mime).put("data",Base64.getEncoder().encodeToString(bytes))))
+    val parts=JSONArray().put(JSONObject().put("text",prompt)).put(JSONObject().put("inline_data",JSONObject().put("mime_type",mime).put("data",Base64.encodeToString(bytes,Base64.NO_WRAP))))
     val body=JSONObject().put("contents",JSONArray().put(JSONObject().put("parts",parts)))
-    val url=URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+apiKey())
+    val url=URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key="+apiKey())
     val conn=url.openConnection() as HttpURLConnection;conn.requestMethod="POST";conn.connectTimeout=25000;conn.readTimeout=45000;conn.setRequestProperty("Content-Type","application/json");conn.doOutput=true
     conn.outputStream.use{it.write(body.toString().toByteArray(Charsets.UTF_8))}
     val response=(if(conn.responseCode in 200..299)conn.inputStream else conn.errorStream).bufferedReader().use{it.readText()}
@@ -218,11 +218,11 @@ class MainActivity : Activity() {
  private fun hasApiKey()=prefs.contains("gemini_key")
  private fun saveApiKey(value:String){
   val key=encryptionKey();val cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,key);val encrypted=cipher.doFinal(value.toByteArray())
-  prefs.edit().putString("gemini_iv",Base64.getEncoder().encodeToString(cipher.iv)).putString("gemini_key",Base64.getEncoder().encodeToString(encrypted)).apply()
+  prefs.edit().putString("gemini_iv",Base64.encodeToString(cipher.iv,Base64.NO_WRAP)).putString("gemini_key",Base64.encodeToString(encrypted,Base64.NO_WRAP)).apply()
  }
  private fun apiKey():String{
-  val cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");cipher.init(javax.crypto.Cipher.DECRYPT_MODE,encryptionKey(),GCMParameterSpec(128,Base64.getDecoder().decode(prefs.getString("gemini_iv",""))))
-  return String(cipher.doFinal(Base64.getDecoder().decode(prefs.getString("gemini_key",""))))
+  val cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");cipher.init(javax.crypto.Cipher.DECRYPT_MODE,encryptionKey(),GCMParameterSpec(128,Base64.decode(prefs.getString("gemini_iv",""),Base64.NO_WRAP)))
+  return String(cipher.doFinal(Base64.decode(prefs.getString("gemini_key",""),Base64.NO_WRAP)))
  }
  private fun deleteApiKey(){prefs.edit().remove("gemini_iv").remove("gemini_key").apply()}
  private fun encryptionKey():javax.crypto.SecretKey{
