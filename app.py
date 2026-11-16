@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import threading
 import json
 import math
 import os
@@ -21,8 +20,6 @@ INSTANCE_DIR = BASE_DIR / "instance"
 DATABASE = Path(os.environ.get("DATABASE_PATH", INSTANCE_DIR / "ai_khata.db"))
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MOBILE_RATE_LIMIT_PER_HOUR = int(os.environ.get("MOBILE_RATE_LIMIT_PER_HOUR", "8"))
-_mobile_requests = {}
-_mobile_requests_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
@@ -85,6 +82,13 @@ def init_db():
             window_start TEXT NOT NULL,
             locked_until TEXT
         );
+        CREATE TABLE IF NOT EXISTS mobile_ai_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bucket_hash TEXT NOT NULL,
+            requested_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mobile_ai_requests_bucket_time
+        ON mobile_ai_requests(bucket_hash, requested_at);
         CREATE INDEX IF NOT EXISTS idx_transactions_customer_date
         ON transactions(customer_id, transaction_date);
         """
@@ -619,20 +623,31 @@ def api_mobile_extract():
     if len(install_id) < 16 or len(install_id) > 128:
         return jsonify({"error": "This installation could not be identified. Update the app and try again."}), 400
 
-    # Rate limits are keyed by both a non-reversible install hash and source IP.
-    now = datetime.utcnow()
+    # Store only a one-way install/IP hash, not the device identifier.
     address = request.remote_addr or "unknown"
     install_hash = hashlib.sha256(install_id.encode("utf-8")).hexdigest()
     bucket = hashlib.sha256((install_hash + "|" + address).encode("utf-8")).hexdigest()
-    with _mobile_requests_lock:
-        recent = [stamp for stamp in _mobile_requests.get(bucket, []) if now - stamp < timedelta(hours=1)]
-        if len(recent) >= MOBILE_RATE_LIMIT_PER_HOUR:
+    db = get_db()
+    cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("DELETE FROM mobile_ai_requests WHERE requested_at < ?", (cutoff,))
+        recent_count = db.execute(
+            "SELECT COUNT(*) FROM mobile_ai_requests WHERE bucket_hash=?",
+            (bucket,),
+        ).fetchone()[0]
+        if recent_count >= MOBILE_RATE_LIMIT_PER_HOUR:
+            db.rollback()
             return jsonify({"error": "You have reached the photo-reading limit. Please try again later."}), 429
-        recent.append(now)
-        _mobile_requests[bucket] = recent
-        if len(_mobile_requests) > 10000:
-            for old_key in list(_mobile_requests)[:2000]:
-                _mobile_requests.pop(old_key, None)
+        db.execute(
+            "INSERT INTO mobile_ai_requests(bucket_hash, requested_at) VALUES (?, ?)",
+            (bucket, datetime.utcnow().isoformat()),
+        )
+        db.commit()
+    except sqlite3.Error:
+        db.rollback()
+        app.logger.exception("Mobile AI rate limiter could not record a request.")
+        return jsonify({"error": "Photo reading is temporarily unavailable. Please try again."}), 503
 
     if not ai_is_ready():
         return jsonify({"error": "AI photo reading is not configured on the service yet."}), 503
