@@ -96,6 +96,28 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         return writableDatabase.delete("customers", "id=?", arrayOf(id.toString()))
     }
 
+    fun mergeCustomers(sourceId: Long, targetId: Long) {
+        require(sourceId != targetId) { "Choose two different customers." }
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val sourceExists = db.rawQuery(
+                "SELECT 1 FROM customers WHERE id=?", arrayOf(sourceId.toString())
+            ).use { it.moveToFirst() }
+            val targetExists = db.rawQuery(
+                "SELECT 1 FROM customers WHERE id=?", arrayOf(targetId.toString())
+            ).use { it.moveToFirst() }
+            require(sourceExists && targetExists) { "One of these customer accounts no longer exists." }
+            db.update("transactions", ContentValues().apply {
+                put("customer_id", targetId)
+            }, "customer_id=?", arrayOf(sourceId.toString()))
+            db.delete("customers", "id=?", arrayOf(sourceId.toString()))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun customers(query: String = ""): List<CustomerRow> =
         readableDatabase.rawQuery(
             """SELECT c.id,c.name,c.phone,
