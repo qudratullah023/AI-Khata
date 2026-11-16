@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">BUSINESS SNAPSHOT</div><h1>Monthly reports</h1><p class="muted">A simple view of credits and repayments over time.</p></div></div>
+<section class="panel"><div class="panel-heading"><div><h2>Last 12 active months</h2><p class="muted">Figures are calculated from saved transactions.</p></div></div>
+{% if months %}
+<div class="report-list">{% for month in months %}<article class="report-row"><div class="report-month"><strong>{{ month.month }}</strong><small>{{ month.entry_count }} entr{{ 'y' if month.entry_count == 1 else 'ies' }}</small></div><div class="report-metrics"><div><small>Credit</small><strong class="amount-credit">{{ month.credit_total|money }}</strong></div><div><small>Payments</small><strong class="amount-payment">{{ month.payment_total|money }}</strong></div><div><small>Balance change</small><strong>{{ (month.credit_total - month.payment_total)|money }}</strong></div></div><div class="report-bar"><span style="width: {{ (100 * month.credit_total / ((month.credit_total + month.payment_total) or 1))|round|int }}%"></span></div></article>{% endfor %}</div>
+{% else %}<div class="empty-state"><span class="empty-icon">▥</span><strong>No reports yet</strong><p>Once you record a transaction, your monthly report will appear here.</p></div>{% endif %}
+</section>
+<div class="inline-note report-note">Credit records show goods or services given on account. Payments show money received. These figures are ledger activity summaries, not audited accounting statements.</div>
+{% endblock %}
