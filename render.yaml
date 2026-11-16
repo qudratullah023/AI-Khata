@@ -20,6 +20,6 @@ services:
       - key: GEMINI_API_KEYS
         sync: false
       - key: GEMINI_MODELS
-        value: gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash
+        value: gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-2.5-flash
       - key: MOBILE_RATE_LIMIT_PER_HOUR
         value: "8"
