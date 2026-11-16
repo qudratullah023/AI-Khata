@@ -227,6 +227,27 @@ class MainActivity : Activity() {
         titleBlock.addView(text(title, 22, deepGreen, true))
         if (!subtitle.isNullOrBlank()) titleBlock.addView(text(subtitle, 13, muted))
         header.addView(titleBlock, LinearLayout.LayoutParams(0, -2, 1f))
+        val more = TextView(this).apply {
+            text = "⋮"; textSize = 27f; gravity = Gravity.CENTER
+            setTextColor(green); background = rounded(Color.WHITE, 13, line)
+            isClickable = true; isFocusable = true
+            setOnClickListener { view ->
+                val menu = PopupMenu(this@MainActivity, view)
+                menu.menu.add(0, 1, 0, "Home")
+                menu.menu.add(0, 2, 1, "Customers")
+                menu.menu.add(0, 3, 2, "Monthly reports")
+                menu.menu.add(0, 4, 3, "Shop settings")
+                menu.menu.add(0, 5, 4, "Export backup")
+                menu.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        1 -> showHome(); 2 -> showCustomers(); 3 -> showReports()
+                        4 -> showSettings(); 5 -> exportBackup()
+                    }; true
+                }
+                menu.show()
+            }
+        }
+        header.addView(more, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(8) })
         root.addView(header)
         gap(17)
     }
@@ -713,31 +734,28 @@ class MainActivity : Activity() {
         })
 
         gap(12)
-        section("Handwritten photo reading", "Optional. Add an access key to read photos of ledger pages.")
-        val api = input("AI access key")
-        api.setText(if (hasApiKey()) "••••••••••••••••" else "")
+        section("AI photo reading", "Add one or more Gemini API keys, one per line. If a key or model fails, AI Khata automatically tries the next option.")
+        val api = input("Paste Gemini API key(s), one per line").apply {
+            setSingleLine(false); minLines = 2; maxLines = 4
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            gravity = Gravity.TOP
+        }
+        api.setText(if (hasApiKey()) "Saved securely · " + apiKeyCount() + " key(s).\\nPaste new keys here to replace them." else "")
         root.addView(api)
-        button("Save access key", {
+        button("Save AI keys", {
             val value = api.text.toString().trim()
-            if (value.isNotBlank() && !value.startsWith("••")) {
-                saveApiKey(value)
-                toast("Photo reading is ready.")
-                showSettings()
-            } else {
-                toast("Enter a new access key.")
-            }
-        })
+            if (value.isNotBlank() && !value.startsWith("Saved securely")) {
+                val count = saveApiKeys(value)
+                if (count > 0) { toast("$count AI key(s) saved securely. Automatic fallback is on."); showSettings() }
+                else toast("No valid key was found. Paste one key per line.")
+            } else toast("Paste one or more API keys first.")
+        }, true)
         if (hasApiKey()) {
-            button("Remove photo-reading access", {
-                AlertDialog.Builder(this)
-                    .setTitle("Remove access?")
-                    .setMessage("Handwritten photo reading will be turned off until you add a key again.")
+            button("Remove all AI keys", {
+                AlertDialog.Builder(this).setTitle("Remove AI keys?")
+                    .setMessage("Photo reading will be turned off until you add keys again.")
                     .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Remove") { _, _ ->
-                        deleteApiKey()
-                        toast("Photo reading access removed.")
-                        showSettings()
-                    }.show()
+                    .setPositiveButton("Remove") { _, _ -> deleteApiKey(); toast("AI keys removed."); showSettings() }.show()
             }, danger = true)
         }
 
@@ -746,7 +764,7 @@ class MainActivity : Activity() {
         button("Export a backup", { exportBackup() })
         button("Restore a backup", { importBackup() })
         gap(10)
-        root.addView(text("AI Khata · Version 2.1.0", 12, muted))
+        root.addView(text("AI Khata · Version 2.2.0", 12, muted))
     }
 
     private fun validDate(value: String): Boolean {
@@ -869,30 +887,43 @@ class MainActivity : Activity() {
                     "contents",
                     JSONArray().put(JSONObject().put("parts", parts))
                 )
-                val url = URL(
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" +
-                        apiKey()
-                )
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 25000
-                connection.readTimeout = 45000
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.doOutput = true
-                connection.outputStream.use {
-                    it.write(body.toString().toByteArray(Charsets.UTF_8))
+                val models = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash")
+                val keys = apiKeys()
+                require(keys.isNotEmpty()) { "Add an AI key in Shop settings first." }
+                var answer: String? = null
+                val failures = ArrayList<String>()
+                for (keyIndex in keys.indices) {
+                    for (model in models) {
+                        var connection: HttpURLConnection? = null
+                        try {
+                            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=" + java.net.URLEncoder.encode(keys[keyIndex], "UTF-8"))
+                            connection = url.openConnection() as HttpURLConnection
+                            connection.requestMethod = "POST"
+                            connection.connectTimeout = 15000; connection.readTimeout = 35000
+                            connection.setRequestProperty("Content-Type", "application/json")
+                            connection.doOutput = true
+                            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                            val code = connection.responseCode
+                            val response = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                            if (code !in 200..299) {
+                                failures.add(model + " / key " + (keyIndex + 1) + ": HTTP " + code)
+                                continue
+                            }
+                            val parts = JSONObject(response).optJSONArray("candidates")
+                                ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                            val candidate = parts?.optJSONObject(0)?.optString("text").orEmpty()
+                            if (candidate.isNotBlank()) { answer = candidate; break }
+                            failures.add(model + " / key " + (keyIndex + 1) + ": empty response")
+                        } catch (attempt: Exception) {
+                            failures.add(model + " / key " + (keyIndex + 1) + ": " + (attempt.message ?: "connection error"))
+                        } finally { connection?.disconnect() }
+                    }
+                    if (answer != null) break
                 }
-                val response = (
-                    if (connection.responseCode in 200..299) connection.inputStream
-                    else connection.errorStream
-                ).bufferedReader().use { it.readText() }
-                if (connection.responseCode !in 200..299) {
-                    throw Exception("Photo reading service returned error " + connection.responseCode + ".")
+                if (answer == null) {
+                    throw Exception("All AI options failed. Check internet, key limits and API access. Tried " + keys.size + " key(s) and " + models.size + " models. " + failures.takeLast(3).joinToString("; "))
                 }
-                val answer = JSONObject(response)
-                    .getJSONArray("candidates").getJSONObject(0)
-                    .getJSONObject("content").getJSONArray("parts")
-                    .getJSONObject(0).getString("text")
                 val start = answer.indexOf('{')
                 val end = answer.lastIndexOf('}')
                 require(start >= 0 && end > start) { "No readable entries were returned." }
@@ -986,37 +1017,33 @@ class MainActivity : Activity() {
     }
 
     private fun hasApiKey() = prefs.contains("gemini_key")
+    private fun apiKeyCount() = apiKeys().size
 
-    private fun saveApiKey(value: String) {
+    private fun saveApiKeys(value: String): Int {
+        val keys = value.split(Regex("[\\r\\n,;]+")).map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("Saved securely") }.distinct()
+        if (keys.isEmpty()) return 0
         val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, encryptionKey())
-        val encrypted = cipher.doFinal(value.toByteArray())
-        prefs.edit()
-            .putString("gemini_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .putString("gemini_key", Base64.encodeToString(encrypted, Base64.NO_WRAP))
-            .apply()
+        val encrypted = cipher.doFinal(JSONArray(keys).toString().toByteArray(Charsets.UTF_8))
+        prefs.edit().putString("gemini_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("gemini_key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+        return keys.size
     }
 
-    private fun apiKey(): String {
+    private fun apiKeys(): List<String> {
+        if (!prefs.contains("gemini_key")) return emptyList()
         val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(
-            javax.crypto.Cipher.DECRYPT_MODE,
-            encryptionKey(),
-            GCMParameterSpec(
-                128,
-                Base64.decode(prefs.getString("gemini_iv", ""), Base64.NO_WRAP)
-            )
-        )
-        return String(
-            cipher.doFinal(
-                Base64.decode(prefs.getString("gemini_key", ""), Base64.NO_WRAP)
-            )
-        )
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, encryptionKey(),
+            GCMParameterSpec(128, Base64.decode(prefs.getString("gemini_iv", ""), Base64.NO_WRAP)))
+        val raw = String(cipher.doFinal(Base64.decode(prefs.getString("gemini_key", ""), Base64.NO_WRAP)), Charsets.UTF_8)
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }
+        } catch (_: Exception) { listOf(raw).filter { it.isNotBlank() } }
     }
 
-    private fun deleteApiKey() {
-        prefs.edit().remove("gemini_iv").remove("gemini_key").apply()
-    }
+    private fun deleteApiKey() { prefs.edit().remove("gemini_iv").remove("gemini_key").apply() }
 
     private fun encryptionKey(): javax.crypto.SecretKey {
         val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
