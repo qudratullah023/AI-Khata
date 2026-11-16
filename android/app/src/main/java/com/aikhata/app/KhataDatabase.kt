@@ -121,7 +121,8 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     fun customers(query: String = ""): List<CustomerRow> =
         readableDatabase.rawQuery(
             """SELECT c.id,c.name,c.phone,
-            COALESCE(SUM(CASE WHEN t.transaction_type='credit' THEN t.amount_paisa ELSE -t.amount_paisa END) / 100.0,0)
+            COALESCE(SUM(CASE WHEN t.transaction_type='credit' THEN t.amount_paisa ELSE 0 END),0),
+            COALESCE(SUM(CASE WHEN t.transaction_type='payment' THEN t.amount_paisa ELSE 0 END),0)
             FROM customers c LEFT JOIN transactions t ON t.customer_id=c.id
             WHERE c.name LIKE ? OR c.phone LIKE ?
             GROUP BY c.id ORDER BY c.name COLLATE NOCASE""",
@@ -129,7 +130,13 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
-                    add(CustomerRow(cursor.getLong(0), cursor.getString(1), cursor.getString(2), cursor.getDouble(3)))
+                    val balancePaisa = LedgerMath.calculateBalance(cursor.getLong(3), cursor.getLong(4))
+                    add(CustomerRow(
+                        cursor.getLong(0),
+                        cursor.getString(1),
+                        cursor.getString(2),
+                        balancePaisa / 100.0
+                    ))
                 }
             }
         }
