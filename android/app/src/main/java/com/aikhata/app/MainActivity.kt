@@ -1270,6 +1270,7 @@ class MainActivity : ComponentActivity() {
     private fun reviewAiEntries(entries: JSONArray, queuedFile: File? = null) {
         val rows = ArrayList<JSONObject>()
         val lines = ArrayList<String>()
+        val suggestions = LinkedHashMap<String, CustomerRow>()
         for (index in 0 until entries.length()) {
             val item = entries.optJSONObject(index) ?: continue
             val name = item.optString("customer_name").trim()
@@ -1289,40 +1290,116 @@ class MainActivity : ComponentActivity() {
                 name + ": " + (if (type == "credit") "Credit " else "Payment ") +
                     money(amount) + " · " + date
             )
+            val possibleMatch = findSimilarCustomer(name)
+            if (possibleMatch != null && !possibleMatch.name.equals(name, true)) {
+                suggestions[name] = possibleMatch
+                lines.add("Possible existing customer: " + possibleMatch.name)
+            }
         }
         if (rows.isEmpty()) {
             toast("No clear ledger entries were found.")
             return
         }
+
+        val message = lines.joinToString("\n\n") +
+            "\n\nPlease check every name, date and amount. Nothing is saved until you confirm."
         AlertDialog.Builder(this)
             .setTitle("Check " + rows.size + " suggested entries")
-            .setMessage(
-                lines.joinToString("\n\n") +
-                    "\n\nPlease check every name, date and amount. Nothing is added until you confirm."
-            )
+            .setMessage(message)
             .setNegativeButton("Discard", null)
-            .setPositiveButton("Save entries") { _, _ ->
-                try {
-                    rows.forEach { item ->
-                        val name = item.getString("name")
-                        val existing = db.customers().firstOrNull { it.name.equals(name, true) }
-                        val id = existing?.id ?: db.addCustomer(name, "")
-                        db.addTransaction(
-                            id,
-                            item.getString("type"),
-                            item.getDouble("amount"),
-                            item.getString("description"),
-                            item.getString("date")
-                        )
+            .setPositiveButton("Continue") { _, _ ->
+                if (suggestions.isEmpty()) {
+                    saveReviewedEntries(rows, queuedFile, suggestions, true)
+                } else {
+                    val choices = suggestions.entries.joinToString("\n") {
+                        it.key + "  →  " + it.value.name
                     }
-                    queuedFile?.delete()
-                    toast("Entries added to your khata.")
-                    showHome()
-                } catch (error: Exception) {
-                    toast("Some entries could not be saved: " + error.message)
+                    AlertDialog.Builder(this)
+                        .setTitle("Possible duplicate customers")
+                        .setMessage(
+                            "AI Khata found accounts with similar names:\n\n" + choices +
+                                "\n\nUse the existing accounts, or create separate new accounts?"
+                        )
+                        .setNegativeButton("Cancel", null)
+                        .setNeutralButton("Create separate") { _, _ ->
+                            saveReviewedEntries(rows, queuedFile, suggestions, false)
+                        }
+                        .setPositiveButton("Use existing") { _, _ ->
+                            saveReviewedEntries(rows, queuedFile, suggestions, true)
+                        }
+                        .show()
                 }
             }
             .show()
+    }
+
+    private fun saveReviewedEntries(
+        rows: List<JSONObject>,
+        queuedFile: File?,
+        suggestions: Map<String, CustomerRow>,
+        useSuggestions: Boolean
+    ) {
+        try {
+            rows.forEach { item ->
+                val name = item.getString("name")
+                val exact = db.customers().firstOrNull { it.name.equals(name, true) }
+                val suggested = if (useSuggestions) suggestions[name] else null
+                val customerId = exact?.id ?: suggested?.id ?: db.addCustomer(name, "")
+                db.addTransaction(
+                    customerId,
+                    item.getString("type"),
+                    item.getDouble("amount"),
+                    item.getString("description"),
+                    item.getString("date")
+                )
+            }
+            queuedFile?.delete()
+            toast("Entries added to your khata.")
+            showHome()
+        } catch (error: Exception) {
+            toast("Some entries could not be saved: " + error.message)
+        }
+    }
+
+    private fun findSimilarCustomer(name: String): CustomerRow? {
+        val normalized = normalizeCustomerName(name)
+        if (normalized.length < 3) return null
+        return db.customers()
+            .asSequence()
+            .map { customer -> customer to customerNameSimilarity(normalized, normalizeCustomerName(customer.name)) }
+            .filter { it.second >= 0.72 }
+            .maxByOrNull { it.second }
+            ?.first
+    }
+
+    private fun normalizeCustomerName(value: String): String =
+        value.lowercase(Locale.ROOT)
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
+    private fun customerNameSimilarity(first: String, second: String): Double {
+        if (first == second) return 1.0
+        if (first.isBlank() || second.isBlank()) return 0.0
+        if (first.startsWith("$second ") || second.startsWith("$first ")) {
+            return 0.90
+        }
+        val longer = maxOf(first.length, second.length)
+        val previous = IntArray(second.length + 1) { it }
+        val current = IntArray(second.length + 1)
+        for (i in first.indices) {
+            current[0] = i + 1
+            for (j in second.indices) {
+                val cost = if (first[i] == second[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost
+                )
+            }
+            for (j in previous.indices) previous[j] = current[j]
+        }
+        return 1.0 - previous[second.length].toDouble() / longer
     }
 
     private fun hasApiKey() = prefs.contains("gemini_key")
