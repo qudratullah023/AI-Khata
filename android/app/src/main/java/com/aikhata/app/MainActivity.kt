@@ -1080,7 +1080,10 @@ class MainActivity : FragmentActivity() {
         Snackbar.make(findViewById(android.R.id.content), "Entry deleted", Snackbar.LENGTH_LONG)
             .setAction("UNDO") {
                 try {
-                    db.addTransaction(customerId, entry.type, entry.amount, entry.description, entry.date)
+                    db.addTransaction(
+                        customerId, entry.type, entry.amount, entry.description, entry.date,
+                        entry.productId, entry.quantity, entry.unitCost
+                    )
                     showCustomer(customerId)
                     toast("Entry restored.")
                 } catch (error: Exception) {
@@ -1108,7 +1111,10 @@ class MainActivity : FragmentActivity() {
                         try {
                             val restoredId = db.addCustomer(customer.name, customer.phone)
                             savedEntries.forEach { entry ->
-                                db.addTransaction(restoredId, entry.type, entry.amount, entry.description, entry.date)
+                                db.addTransaction(
+                                    restoredId, entry.type, entry.amount, entry.description, entry.date,
+                                    entry.productId, entry.quantity, entry.unitCost
+                                )
                             }
                             showCustomer(restoredId)
                             toast("Customer khata restored.")

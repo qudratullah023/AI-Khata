@@ -52,6 +52,36 @@ class KhataDatabaseBusinessManagementTest {
     }
 
     @Test
+    fun deletingAndRestoringProductSalesKeepsInventoryAccurate() {
+        val context = RuntimeEnvironment.getApplication()
+        context.deleteDatabase("ai_khata_local.db")
+        val database = KhataDatabase(context)
+        try {
+            database.createOwner("Test shop", "123456")
+            val customerId = database.addCustomer("Amina", "")
+            val productId = database.addProduct("Oil", "", "bottle", 200.0, 250.0, 10.0, 2.0)
+            database.recordProductSale(customerId, productId, 3.0, 250.0, "Oil", "2026-11-10")
+            val sale = database.transactions(customerId).single()
+
+            assertEquals(7.0, database.products().single().stockQuantity, 0.001)
+            assertEquals(1, database.deleteTransaction(sale.id))
+            assertEquals(10.0, database.products().single().stockQuantity, 0.001)
+
+            database.addTransaction(
+                customerId, sale.type, sale.amount, sale.description, sale.date,
+                sale.productId, sale.quantity, sale.unitCost
+            )
+            assertEquals(7.0, database.products().single().stockQuantity, 0.001)
+
+            assertEquals(1, database.deleteCustomer(customerId))
+            assertEquals(10.0, database.products().single().stockQuantity, 0.001)
+        } finally {
+            database.close()
+            context.deleteDatabase("ai_khata_local.db")
+        }
+    }
+
+    @Test
     fun failedSaleDoesNotChangeStockOrCreateLedgerEntry() {
         val context = RuntimeEnvironment.getApplication()
         context.deleteDatabase("ai_khata_local.db")

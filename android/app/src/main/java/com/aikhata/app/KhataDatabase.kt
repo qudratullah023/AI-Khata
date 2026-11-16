@@ -134,8 +134,31 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     }
 
     fun deleteCustomer(id: Long): Int {
-        // The database foreign-key rule also removes this customer's transactions.
-        return writableDatabase.delete("customers", "id=?", arrayOf(id.toString()))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val productQuantities = db.rawQuery(
+                "SELECT product_id,COALESCE(SUM(quantity_milli),0) FROM transactions WHERE customer_id=? AND product_id IS NOT NULL AND quantity_milli IS NOT NULL GROUP BY product_id",
+                arrayOf(id.toString())
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getLong(1))
+                }
+            }
+            val deleted = db.delete("customers", "id=?", arrayOf(id.toString()))
+            if (deleted > 0) {
+                productQuantities.forEach { (productId, quantityMilli) ->
+                    db.execSQL(
+                        "UPDATE products SET stock_milli=stock_milli+? WHERE id=?",
+                        arrayOf(quantityMilli, productId)
+                    )
+                }
+            }
+            db.setTransactionSuccessful()
+            return deleted
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun mergeCustomers(sourceId: Long, targetId: Long) {
@@ -185,20 +208,77 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
     fun customer(id: Long) = customers().firstOrNull { it.id == id }
 
-    fun addTransaction(id: Long, type: String, amount: Double, description: String, date: String) {
+    fun addTransaction(
+        id: Long,
+        type: String,
+        amount: Double,
+        description: String,
+        date: String,
+        productId: Long? = null,
+        quantity: Double? = null,
+        unitCost: Double? = null
+    ) {
         require(type == "credit" || type == "payment")
         require(amount > 0 && amount.isFinite())
-        val values = ContentValues().apply {
-            put("customer_id", id)
-            put("transaction_date", date)
-            put("transaction_type", type)
-            put("description", description.trim())
-            put("amount_paisa", toPaisa(amount))
-            put("created_at", now())
+        require(LedgerMath.isValidDate(date))
+        val hasSaleSnapshot = productId != null || quantity != null || unitCost != null
+        require(!hasSaleSnapshot || (type == "credit" && quantity != null && unitCost != null &&
+            unitCost >= 0.0 && unitCost.isFinite())) {
+            "The product sale details are incomplete."
         }
-        writableDatabase.insertOrThrow("transactions", null, values)
-    }
+        val quantityMilli = if (hasSaleSnapshot) toMilli(quantity!!, allowZero = false) else null
+        val unitCostPaisa = if (hasSaleSnapshot) toPaisaNonNegative(unitCost!!) else null
 
+        val db = writableDatabase
+        if (productId == null) {
+            val values = ContentValues().apply {
+                put("customer_id", id)
+                put("transaction_date", date)
+                put("transaction_type", type)
+                put("description", description.trim())
+                put("amount_paisa", toPaisa(amount))
+                put("created_at", now())
+                if (quantityMilli != null && unitCostPaisa != null) {
+                    put("quantity_milli", quantityMilli)
+                    put("unit_cost_paisa", unitCostPaisa)
+                }
+            }
+            db.insertOrThrow("transactions", null, values)
+            return
+        }
+
+        require(quantityMilli != null && unitCostPaisa != null) { "The product sale details are incomplete." }
+        db.beginTransaction()
+        try {
+            val stock = db.rawQuery(
+                "SELECT stock_milli FROM products WHERE id=?",
+                arrayOf(productId.toString())
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+                ?: throw IllegalArgumentException("The original product no longer exists.")
+            require(stock >= quantityMilli) { "Not enough stock to restore this sale." }
+            val values = ContentValues().apply {
+                put("customer_id", id)
+                put("transaction_date", date)
+                put("transaction_type", type)
+                put("description", description.trim())
+                put("amount_paisa", toPaisa(amount))
+                put("created_at", now())
+                put("product_id", productId)
+                put("quantity_milli", quantityMilli)
+                put("unit_cost_paisa", unitCostPaisa)
+            }
+            db.insertOrThrow("transactions", null, values)
+            db.update(
+                "products",
+                ContentValues().apply { put("stock_milli", stock - quantityMilli) },
+                "id=?",
+                arrayOf(productId.toString())
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
     fun updateTransaction(id: Long, amount: Double, description: String, date: String) {
         require(amount > 0 && amount.isFinite())
         val values = ContentValues().apply {
@@ -210,7 +290,29 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     }
 
     fun deleteTransaction(id: Long): Int {
-        return writableDatabase.delete("transactions", "id=?", arrayOf(id.toString()))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val sale = db.rawQuery(
+                "SELECT product_id,quantity_milli FROM transactions WHERE id=?",
+                arrayOf(id.toString())
+            ).use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0) && !cursor.isNull(1)) {
+                    cursor.getLong(0) to cursor.getLong(1)
+                } else null
+            }
+            val deleted = db.delete("transactions", "id=?", arrayOf(id.toString()))
+            if (deleted > 0 && sale != null) {
+                db.execSQL(
+                    "UPDATE products SET stock_milli=stock_milli+? WHERE id=?",
+                    arrayOf(sale.second, sale.first)
+                )
+            }
+            db.setTransactionSuccessful()
+            return deleted
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun transactions(id: Long): List<TransactionRow> =
