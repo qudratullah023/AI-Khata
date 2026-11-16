@@ -68,6 +68,39 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let { runAiExtraction(it) }
+        }
+        cameraCapture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+            val uri = pendingCameraUri
+            pendingCameraUri = null
+            if (success && uri != null) runAiExtraction(uri)
+        }
+        backupCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri?.let { writeBackupFile(it) }
+        }
+        backupPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { readBackupFile(it) }
+        }
+        pendingCameraUri = savedInstanceState?.getString("pending_camera_uri")?.let { Uri.parse(it) }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val action = backAction
+                if (action != null) {
+                    backAction = null
+                    action.invoke()
+                    return
+                }
+                if (unlocked && currentScreen == "home") {
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastHomeBack < 1800L) finish()
+                    else {
+                        lastHomeBack = now
+                        toast("Press back again to exit.")
+                    }
+                } else finish()
+            }
+        })
         db = KhataDatabase(this)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         window.statusBarColor = paper
@@ -93,29 +126,10 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    @Deprecated("Back navigation is handled inside the app")
-    override fun onBackPressed() {
-        val action = backAction
-        if (action != null) {
-            backAction = null
-            action.invoke()
-            return
-        }
-        if (unlocked && currentScreen == "home") {
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastHomeBack < 1800) {
-                super.onBackPressed()
-            } else {
-                lastHomeBack = now
-                toast("Press back again to exit.")
-            }
-            return
-        }
-        if (!unlocked && db.isSetUp()) {
-            finish()
-            return
-        }
-        super.onBackPressed()
+    override fun onSaveInstanceState(outState: Bundle) {
+        pendingCameraUri?.let { outState.putString("pending_camera_uri", it.toString()) }
+        outState.putBoolean("was_unlocked", unlocked)
+        super.onSaveInstanceState(outState)
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
