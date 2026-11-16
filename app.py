@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import threading
 import json
 import math
 import os
@@ -18,6 +20,9 @@ BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
 DATABASE = Path(os.environ.get("DATABASE_PATH", INSTANCE_DIR / "ai_khata.db"))
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MOBILE_RATE_LIMIT_PER_HOUR = int(os.environ.get("MOBILE_RATE_LIMIT_PER_HOUR", "8"))
+_mobile_requests = {}
+_mobile_requests_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
@@ -118,6 +123,8 @@ def protect_requests():
         if session.get("owner_id"):
             session["last_activity"] = now_iso()
 
+    if request.path == "/api/mobile/extract":
+        return
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         supplied = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
         expected = session.get("csrf_token", "")
@@ -451,24 +458,74 @@ Rules:
 """
 
 
+def gemini_api_keys():
+    values = []
+    for source in (os.environ.get("GEMINI_API_KEYS", ""), os.environ.get("GEMINI_API_KEY", "")):
+        values.extend(part.strip() for part in re.split(r"[,;\\s]+", source) if part.strip())
+    return list(dict.fromkeys(values))
+
+
 def extract_with_gemini(image_bytes, mime_type):
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    response = requests.post(
-        endpoint,
-        params={"key": os.environ["GEMINI_API_KEY"]},
-        json={
-            "contents": [{"parts": [
-                {"text": EXTRACTION_PROMPT + "\nCurrent date: " + date.today().isoformat()},
-                {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode("ascii")}},
-            ]}],
-            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1},
+    keys = gemini_api_keys()
+    if not keys:
+        raise RuntimeError("Gemini is not configured on the server.")
+    models = [
+        part.strip() for part in os.environ.get(
+            "GEMINI_MODELS",
+            "gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash"
+        ).split(",") if part.strip()
+    ]
+    schema = {
+        "type": "OBJECT",
+        "properties": {
+            "entries": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "customer_name": {"type": "STRING"},
+                        "date": {"type": "STRING"},
+                        "description": {"type": "STRING"},
+                        "amount": {"type": "NUMBER"},
+                        "type": {"type": "STRING", "enum": ["credit", "payment"]},
+                        "confidence": {"type": "NUMBER"},
+                    },
+                    "required": ["customer_name", "date", "description", "amount", "type", "confidence"],
+                },
+            },
+            "page_total": {"type": "NUMBER"},
         },
-        timeout=90,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    return payload["candidates"][0]["content"]["parts"][0]["text"]
+        "required": ["entries"],
+    }
+    failures = []
+    for key in keys:
+        for model in models:
+            endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                response = requests.post(
+                    endpoint,
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                    json={
+                        "contents": [{"parts": [
+                            {"text": EXTRACTION_PROMPT + "\nRead Urdu script, Roman Urdu, English and mixed numerals. Ignore crossed-out entries. Do not count running totals or balances as new transactions. Include a confidence from 0 to 1 for every row and a page_total when clearly written. Current date: " + date.today().isoformat()},
+                            {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode("ascii")}},
+                        ]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json",
+                            "responseSchema": schema,
+                            "temperature": 0.1,
+                        },
+                    },
+                    timeout=70,
+                )
+                if response.status_code >= 400:
+                    failures.append(f"{model}: HTTP {response.status_code}")
+                    continue
+                payload = response.json()
+                return payload["candidates"][0]["content"]["parts"][0]["text"]
+            except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
+                failures.append(f"{model}: {type(exc).__name__}")
+    raise RuntimeError("All configured Gemini keys and fallback models failed: " + ", ".join(failures[-6:]))
 
 
 def extract_with_openrouter(image_bytes, mime_type):
@@ -533,6 +590,68 @@ def parse_ai_json(raw_text):
             "type": kind,
         })
     return safe_entries
+
+
+@app.post("/api/mobile/extract")
+def api_mobile_extract():
+    install_id = request.headers.get("X-Install-ID", "").strip()
+    if len(install_id) < 16 or len(install_id) > 128:
+        return jsonify({"error": "This installation could not be identified. Update the app and try again."}), 400
+
+    # Rate limits are keyed by both a non-reversible install hash and source IP.
+    now = datetime.utcnow()
+    address = request.remote_addr or "unknown"
+    install_hash = hashlib.sha256(install_id.encode("utf-8")).hexdigest()
+    bucket = hashlib.sha256((install_hash + "|" + address).encode("utf-8")).hexdigest()
+    with _mobile_requests_lock:
+        recent = [stamp for stamp in _mobile_requests.get(bucket, []) if now - stamp < timedelta(hours=1)]
+        if len(recent) >= MOBILE_RATE_LIMIT_PER_HOUR:
+            return jsonify({"error": "You have reached the photo-reading limit. Please try again later."}), 429
+        recent.append(now)
+        _mobile_requests[bucket] = recent
+        if len(_mobile_requests) > 10000:
+            for old_key in list(_mobile_requests)[:2000]:
+                _mobile_requests.pop(old_key, None)
+
+    if not ai_is_ready():
+        return jsonify({"error": "AI photo reading is not configured on the service yet."}), 503
+    upload = request.files.get("ledger_image")
+    if not upload or not upload.filename:
+        return jsonify({"error": "Choose a ledger photo first."}), 400
+    mime_type = (upload.mimetype or "").lower()
+    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+        return jsonify({"error": "Please choose a JPG, PNG or WebP photo."}), 400
+    image_bytes = upload.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        return jsonify({"error": "The image is larger than 10 MB."}), 413
+    signatures = {
+        "image/jpeg": image_bytes.startswith(b"\\xff\\xd8\\xff"),
+        "image/png": image_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n"),
+        "image/webp": len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP",
+    }
+    if not signatures.get(mime_type, False):
+        return jsonify({"error": "The selected file is not a valid image."}), 400
+    try:
+        raw = extract_with_openrouter(image_bytes, mime_type) if ai_provider_name() == "openrouter" else extract_with_gemini(image_bytes, mime_type)
+        entries = parse_ai_json(raw)
+        return jsonify({"entries": entries, "review_required": True})
+    except requests.Timeout:
+        return jsonify({"error": "The AI service took too long. Please retry."}), 504
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else 502
+        if code in (401, 403):
+            message = "The AI service key is invalid or does not have access."
+        elif code == 429:
+            message = "The AI service has reached its usage limit. Try again later."
+        else:
+            message = "The AI service could not process this photo. Please retry."
+        return jsonify({"error": message}), 502
+    except RuntimeError as exc:
+        app.logger.warning("Mobile AI fallback exhausted: %s", exc)
+        return jsonify({"error": "All available AI models are temporarily unavailable. Please retry later."}), 502
+    except (requests.RequestException, KeyError, IndexError, ValueError, json.JSONDecodeError):
+        app.logger.exception("Mobile AI extraction failed")
+        return jsonify({"error": "We could not read this photo. Try a brighter, clearer picture."}), 502
 
 
 @app.post("/api/extract")
