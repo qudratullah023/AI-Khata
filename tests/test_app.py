@@ -61,9 +61,11 @@ class AIKhataTests(unittest.TestCase):
         self.assertEqual(self.client.get("/dashboard").status_code, 200)
 
     def test_private_pages_redirect_and_private_api_returns_json_401(self):
-        self.assertEqual(self.client.get("/dashboard").status_code, 302)
-        token = self.csrf(self.client, "/login")
-        response = self.client.post(
+        self.create_owner()
+        locked_client = khata.app.test_client()
+        self.assertEqual(locked_client.get("/dashboard").status_code, 302)
+        token = self.csrf(locked_client, "/login")
+        response = locked_client.post(
             "/api/transactions/bulk",
             json={"entries": [{"customer_name": "Amina", "amount": 100, "type": "credit"}]},
             headers={"X-CSRF-Token": token},
