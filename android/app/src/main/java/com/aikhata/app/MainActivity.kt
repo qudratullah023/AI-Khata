@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -23,6 +24,10 @@ import com.google.android.material.snackbar.Snackbar
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.biometric.BiometricManager
+import com.canhub.cropper.CropImageContract
+import com.canhub.cropper.CropImageContractOptions
+import com.canhub.cropper.CropImageOptions
+import com.canhub.cropper.CropImageView.Guidelines
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.OnBackPressedCallback
@@ -57,6 +62,7 @@ class MainActivity : FragmentActivity() {
     private var pendingCameraUri: Uri? = null
     private lateinit var imagePicker: ActivityResultLauncher<String>
     private lateinit var cameraCapture: ActivityResultLauncher<Uri>
+    private lateinit var cropImage: ActivityResultLauncher<CropImageContractOptions>
     private lateinit var backupCreator: ActivityResultLauncher<String>
     private lateinit var backupPicker: ActivityResultLauncher<Array<String>>
     private lateinit var notificationPermission: ActivityResultLauncher<String>
@@ -80,13 +86,21 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cropImage = registerForActivityResult(CropImageContract()) { result ->
+            val croppedUri = result.uriContent
+            when {
+                croppedUri != null && result.isSuccessful -> runAiExtraction(croppedUri)
+                result.error != null -> toast("The photo could not be cropped: " + result.error?.message.orEmpty())
+                else -> toast("Photo cropping was cancelled.")
+            }
+        }
         imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            uri?.let { runAiExtraction(it) }
+            uri?.let { launchLedgerCrop(it) }
         }
         cameraCapture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
             val uri = pendingCameraUri
             pendingCameraUri = null
-            if (success && uri != null) runAiExtraction(uri)
+            if (success && uri != null) launchLedgerCrop(uri)
         }
         backupCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             if (uri != null) writeBackupFile(uri) else pendingBackupContent = null
@@ -1087,6 +1101,28 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun validDate(value: String): Boolean = LedgerMath.isValidDate(value)
+
+    private fun launchLedgerCrop(uri: Uri) {
+        try {
+            cropImage.launch(
+                CropImageContractOptions(
+                    uri = uri,
+                    cropImageOptions = CropImageOptions(
+                        guidelines = Guidelines.ON,
+                        fixAspectRatio = false,
+                        activityTitle = "Crop ledger page",
+                        toolbarColor = green,
+                        toolbarTitleColor = Color.WHITE,
+                        toolbarBackButtonColor = Color.WHITE,
+                        outputCompressFormat = Bitmap.CompressFormat.JPEG,
+                        outputCompressQuality = 88
+                    )
+                )
+            )
+        } catch (error: Exception) {
+            toast("Could not open the crop editor. Please choose the photo again.")
+        }
+    }
 
     private fun chooseImage() {
         if (!guard()) return
