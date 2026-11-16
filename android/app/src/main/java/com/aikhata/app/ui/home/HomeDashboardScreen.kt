@@ -55,6 +55,7 @@ fun HomeDashboardScreen(
     onCustomers: () -> Unit,
     onAddCustomer: () -> Unit,
     onReports: () -> Unit,
+    onBusiness: () -> Unit,
     onScan: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
@@ -218,6 +219,10 @@ fun HomeDashboardScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     ActionCard("Reports", "↗", "Track performance", Modifier.weight(1f), onReports)
                                     ActionCard("Scan ledger", "◎", "Read a photo", Modifier.weight(1f), onScan)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ActionCard("Business", "▦", "Stock & expenses", Modifier.weight(1f), onBusiness)
+                                    ActionCard("Settings", "⚙", "Shop preferences", Modifier.weight(1f), onSettings)
                                 }
                             }
                         }
