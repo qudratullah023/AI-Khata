@@ -461,7 +461,7 @@ Rules:
 def gemini_api_keys():
     values = []
     for source in (os.environ.get("GEMINI_API_KEYS", ""), os.environ.get("GEMINI_API_KEY", "")):
-        values.extend(part.strip() for part in re.split(r"[,;\\s]+", source) if part.strip())
+        values.extend(part.strip() for part in re.split(r"[,;\s]+", source) if part.strip())
     return list(dict.fromkeys(values))
 
 
