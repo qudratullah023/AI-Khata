@@ -1027,7 +1027,7 @@ class MainActivity : FragmentActivity() {
     private fun deleteTransactionWithUndo(customerId: Long, entry: TransactionRow) {
         if (db.deleteTransaction(entry.id) == 0) return
         showCustomer(customerId)
-        Snackbar.make(root, "Entry deleted", Snackbar.LENGTH_LONG)
+        Snackbar.make(findViewById(android.R.id.content), "Entry deleted", Snackbar.LENGTH_LONG)
             .setAction("UNDO") {
                 try {
                     db.addTransaction(customerId, entry.type, entry.amount, entry.description, entry.date)
@@ -1053,7 +1053,7 @@ class MainActivity : FragmentActivity() {
             .setPositiveButton("Delete khata") { _, _ ->
                 db.deleteCustomer(customerId)
                 showCustomers()
-                Snackbar.make(root, "Customer khata deleted", Snackbar.LENGTH_LONG)
+                Snackbar.make(findViewById(android.R.id.content), "Customer khata deleted", Snackbar.LENGTH_LONG)
                     .setAction("UNDO") {
                         try {
                             val restoredId = db.addCustomer(customer.name, customer.phone)
