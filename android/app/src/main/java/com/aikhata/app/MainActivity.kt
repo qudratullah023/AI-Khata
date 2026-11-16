@@ -150,21 +150,7 @@ class MainActivity : ComponentActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun money(value: Double) = "Rs. " + String.format(Locale.US, "%,.2f", value)
     private fun today() = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-    private fun parseAmount(raw: String): Double? {
-        val digits = raw.trim().map { ch ->
-            when (ch) {
-                in '۰'..'۹' -> ('0'.code + (ch.code - '۰'.code)).toChar()
-                in '٠'..'٩' -> ('0'.code + (ch.code - '٠'.code)).toChar()
-                else -> ch
-            }
-        }.joinToString("")
-            .replace(",", "")
-            .replace("٬", "")
-            .replace("٫", ".")
-            .replace(" ", "")
-        val value = digits.toDoubleOrNull() ?: return null
-        return value.takeIf { it.isFinite() && it > 0 && it <= 9_000_000_000_000.0 }
-    }
+    private fun parseAmount(raw: String): Double? = LedgerMath.parseAmount(raw)
 
     private fun datePickerButton(initialDate: String, onSelected: (String) -> Unit): TextView {
         var currentDate = initialDate
@@ -1003,15 +989,7 @@ class MainActivity : ComponentActivity() {
         root.addView(text("AI Khata · Version 2.2.0", 12, muted))
     }
 
-    private fun validDate(value: String): Boolean {
-        return try {
-            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-            val parsed = formatter.parse(value) ?: return false
-            formatter.format(parsed) == value
-        } catch (_: Exception) {
-            false
-        }
-    }
+    private fun validDate(value: String): Boolean = LedgerMath.isValidDate(value)
 
     private fun chooseImage() {
         if (!guard()) return
