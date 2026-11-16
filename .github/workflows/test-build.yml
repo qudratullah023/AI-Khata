@@ -6,11 +6,6 @@ on:
   pull_request:
     branches: ["main"]
   workflow_dispatch:
-    inputs:
-      web_app_url:
-        description: "HTTPS URL of the deployed AI Khata web service"
-        required: false
-        default: "https://ai-khata.onrender.com"
 
 permissions:
   contents: read
@@ -51,8 +46,7 @@ jobs:
         uses: android-actions/setup-android@v4
       - name: Build debug APK
         env:
-          WEB_APP_URL: ${{ inputs.web_app_url || vars.WEB_APP_URL || 'https://ai-khata.onrender.com' }}
-        run: gradle -p android assembleDebug --stacktrace -PwebAppUrl="$WEB_APP_URL"
+        run: gradle -p android assembleDebug --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
