@@ -261,7 +261,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
                     val amount = tx.optDouble("amount", Double.NaN)
                     val day = tx.optString("date")
                     if (type !in listOf("credit", "payment") || !amount.isFinite() || amount <= 0 ||
-                        !day.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) continue
+                        !LedgerMath.isValidDate(day)) continue
                     val values = ContentValues().apply {
                         put("customer_id", customerId)
                         put("transaction_date", day)
