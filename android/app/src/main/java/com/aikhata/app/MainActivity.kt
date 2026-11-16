@@ -647,36 +647,9 @@ class MainActivity : FragmentActivity() {
 
     private fun showCustomers(query: String = "") {
         if (!guard()) return
-        page("Customers", "Find a customer or open their khata.", back = { showHome() })
-        val search = input("Search by name or phone").apply { setText(query) }
-        root.addView(search)
-        button("Search", { showCustomers(search.text.toString()) }, true)
-        button("+ Add customer", { addCustomerDialog() })
-        button(
-            if (sortCustomersByBalance) "Sort: highest amount due first" else "Sort: customer name",
-            {
-                sortCustomersByBalance = !sortCustomersByBalance
-                showCustomers(search.text.toString())
-            }
-        )
-        button(
-            if (showOnlyDueCustomers) "Show all customer accounts" else "Show only accounts with money due",
-            {
-                showOnlyDueCustomers = !showOnlyDueCustomers
-                showCustomers(search.text.toString())
-            }
-        )
-        val sortedCustomers = db.customers(query).let {
-            if (sortCustomersByBalance) it.sortedByDescending { customer -> customer.balance }
-            else it
-        }
-        val customers = if (showOnlyDueCustomers) sortedCustomers.filter { it.balance > 0.009 } else sortedCustomers
-        gap(6)
-        if (customers.isEmpty()) {
-            root.addView(text("No customers found. Add a customer to start a new khata.", 14, muted))
-        } else {
-            customers.forEach { customerTile(it) }
-        }
+        if (query.isNotBlank()) customersViewModel.setQuery(query)
+        initialComposeRoute = "customers"
+        showHome()
     }
 
     private fun addCustomerDialog() {
