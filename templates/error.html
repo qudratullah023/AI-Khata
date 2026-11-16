@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}<section class="panel error-panel"><div class="eyebrow">AI KHATA</div><h1>{{ code }}</h1><p class="muted">{{ message }}</p><a class="button button-primary" href="{{ url_for('dashboard') if session.get('owner_id') else url_for('login') }}">Go back</a></section>{% endblock %}
