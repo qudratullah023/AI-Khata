@@ -28,6 +28,7 @@ class AiLedgerClient(private val backendUrl: String) {
             "gemini-3.7-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
             "gemini-2.5-flash"
         )
         val prompt = "Read this handwritten shop ledger. Understand Urdu script, Roman Urdu, English and mixed numerals. Ignore crossed-out lines and do not record running totals or balances as new transactions. Return JSON with an entries array. Each entry must include customer_name, date YYYY-MM-DD, description, type credit or payment, amount as a number, and confidence from 0 to 1. Include page_total only when clearly written. Never guess unreadable names or amounts."
