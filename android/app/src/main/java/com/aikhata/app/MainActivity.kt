@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
             if (success && uri != null) runAiExtraction(uri)
         }
         backupCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-            uri?.let { writeBackupFile(it) }
+            if (uri != null) writeBackupFile(uri) else pendingBackupContent = null
         }
         backupPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let { readBackupFile(it) }
@@ -501,6 +501,12 @@ class MainActivity : ComponentActivity() {
             unlocked = false
             showUnlock()
         }, danger = true)
+        val lastBackup = prefs.getLong("last_backup_at", 0L)
+        val backupIsDue = lastBackup == 0L ||
+            System.currentTimeMillis() - lastBackup >= 30L * 24 * 60 * 60 * 1000
+        if (backupIsDue) {
+            button("Create a password-protected backup", { exportBackup() })
+        }
         val waitingPhotos = queuedScanFiles()
         if (waitingPhotos.isNotEmpty()) {
             button("Retry saved photo scans (${waitingPhotos.size})", { processNextQueuedPhoto() })
