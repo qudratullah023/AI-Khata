@@ -14,13 +14,13 @@ A simple digital khata for shopkeepers. Keep customer accounts, credit sales and
 - View all-time totals and month-by-month reports.
 - Share a customer's account statement.
 - Export a backup and restore it when needed.
-- Optionally read a photo of a handwritten ledger with AI. Check the suggested entries before saving them.
+- Optionally read a photo of a handwritten ledger with AI. Add multiple Gemini keys; the app automatically retries alternate keys and supported Flash models. Check suggested entries before saving them.
 
 ## Offline use
 
 Customer accounts, transaction entries, balances, reports, search, edits, deletions and backups are handled on the phone. The app does not require a hosted website or online database.
 
-Handwriting recognition is optional and requires an internet connection and a Gemini API key. Only a photo the shopkeeper deliberately selects for scanning is sent to Google's AI service. The shopkeeper must confirm the suggested entries before they are added.
+Handwriting recognition is optional and requires an internet connection and at least one Gemini API key. Multiple keys can be pasted on separate lines; keys are encrypted with Android Keystore. If a model or key returns an error, the app tries other configured keys and compatible Gemini Flash models. Only a photo the shopkeeper deliberately selects for scanning is sent to Google's AI service. The shopkeeper must confirm the suggested entries before they are added.
 
 ## Privacy and data
 
@@ -39,6 +39,6 @@ To build the APK, open GitHub → Actions → **AI Khata checks and Android APK*
 - Kotlin is used for the Android app screens and app behaviour.
 - SQLite stores the shop's customer and ledger records.
 - PBKDF2 protects the PIN; Android Keystore protects the optional AI key.
-- The Gemini API is used only for optional handwritten-ledger photo reading.
+- The Gemini API is used only for optional handwritten-ledger photo reading, with multi-key and multi-model fallback.
 
 The Python/Flask files in the repository are retained as a separate classroom/web demonstration. The Android APK does not depend on that backend.
