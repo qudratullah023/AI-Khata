@@ -47,6 +47,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavHostController
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.collect
 import com.aikhata.app.ui.customer.CustomerDetailScreen
 import com.aikhata.app.ui.customer.CustomerDetailViewModel
 import com.aikhata.app.ui.customer.CustomerDetailViewModelFactory
