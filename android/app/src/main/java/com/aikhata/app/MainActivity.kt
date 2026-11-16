@@ -1154,23 +1154,6 @@ class MainActivity : ComponentActivity() {
             .show()
     }
 
-    private fun exportBackup() {
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/json"
-            putExtra(Intent.EXTRA_TITLE, "my-shop-khata-backup.json")
-        }
-        startActivityForResult(intent, 78)
-    }
-
-    private fun importBackup() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/json"
-        }
-        startActivityForResult(intent, 79)
-    }
-
     private fun hasApiKey() = prefs.contains("gemini_key")
     private fun apiKeyCount() = apiKeys().size
 
