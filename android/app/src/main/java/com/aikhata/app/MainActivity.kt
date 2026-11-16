@@ -5,6 +5,9 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
+import java.io.File
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -27,6 +30,7 @@ class MainActivity : Activity() {
  private lateinit var db:KhataDatabase
  private lateinit var root:LinearLayout
  private var unlocked=false
+ private var pendingCameraUri:Uri?=null
  private val green=Color.rgb(22,123,98)
  private val ink=Color.rgb(29,45,39)
  private val muted=Color.rgb(103,117,109)
@@ -146,11 +150,30 @@ class MainActivity : Activity() {
  private fun chooseImage(){
   guard()
   if(!hasApiKey()){AlertDialog.Builder(this).setTitle("AI key required").setMessage("All khata records work offline. To read a photo, add your Gemini API key in Settings. Only the selected photo is sent to Gemini.").setPositiveButton("Open settings"){_,_->showSettings()}.setNegativeButton("Cancel",null).show();return}
-  startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply{type="image/*";addCategory(Intent.CATEGORY_OPENABLE)},77)
+  AlertDialog.Builder(this).setTitle("Choose ledger photo")
+   .setItems(arrayOf("Take a new photo","Choose from gallery")){_,which->
+    if(which==0) {
+     try {
+      val photo=File.createTempFile("ai-khata-scan-",".jpg",cacheDir)
+      pendingCameraUri=FileProvider.getUriForFile(this,packageName+".fileprovider",photo)
+      val camera=Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+       putExtra(MediaStore.EXTRA_OUTPUT,pendingCameraUri)
+       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+      }
+      startActivityForResult(camera,80)
+     } catch(e:Exception){toast("Could not open camera: "+e.message)}
+    } else startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply{type="image/*";addCategory(Intent.CATEGORY_OPENABLE)},77)
+   }.show()
  }
  @Deprecated("Uses legacy result API for Android 10 compatibility")
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
   super.onActivityResult(requestCode,resultCode,data)
+  if(requestCode==80) {
+   val uri=if(resultCode==RESULT_OK)pendingCameraUri else null
+   pendingCameraUri=null
+   if(uri!=null)runAiExtraction(uri)
+   return
+  }
   if(resultCode!=RESULT_OK || data?.data==null) return
   when(requestCode) {
    77 -> runAiExtraction(data.data!!)
