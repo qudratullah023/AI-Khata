@@ -30,6 +30,11 @@ jobs:
   android-debug:
     name: Test Android logic and build debug and release APKs
     runs-on: ubuntu-latest
+    env:
+      AI_KHATA_RELEASE_KEYSTORE_BASE64: ${{ secrets.AI_KHATA_RELEASE_KEYSTORE_BASE64 }}
+      AI_KHATA_RELEASE_STORE_PASSWORD: ${{ secrets.AI_KHATA_RELEASE_STORE_PASSWORD }}
+      AI_KHATA_RELEASE_KEY_ALIAS: ${{ secrets.AI_KHATA_RELEASE_KEY_ALIAS }}
+      AI_KHATA_RELEASE_KEY_PASSWORD: ${{ secrets.AI_KHATA_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -44,6 +49,12 @@ jobs:
           gradle-version: "8.10.2"
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+      - name: Configure optional release signing key
+        if: ${{ env.AI_KHATA_RELEASE_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        run: |
+          printf '%s' "$AI_KHATA_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ai-khata-release.jks"
+          echo "AI_KHATA_RELEASE_STORE_FILE=$RUNNER_TEMP/ai-khata-release.jks" >> "$GITHUB_ENV"
       - name: Build debug APK
         run: gradle -p android testDebugUnitTest assembleDebug assembleRelease --stacktrace
       - name: Upload debug APK
