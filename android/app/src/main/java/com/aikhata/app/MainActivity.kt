@@ -932,72 +932,64 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun hasNetworkConnection(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return false
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun installIdentifier(): String {
+        val saved = prefs.getString("installation_id", null)
+        if (!saved.isNullOrBlank()) return saved
+        val created = UUID.randomUUID().toString()
+        prefs.edit().putString("installation_id", created).apply()
+        return created
+    }
+
+    private fun queuedScanDirectory() = File(filesDir, "queued_scans").apply { mkdirs() }
+
+    private fun queuedScanFiles(): List<File> =
+        queuedScanDirectory().listFiles()?.filter { it.isFile && it.extension == "jpg" }
+            ?.sortedBy { it.name } ?: emptyList()
+
+    private fun saveQueuedPhoto(bytes: ByteArray): File {
+        val target = File(queuedScanDirectory(), System.currentTimeMillis().toString() + "-" + UUID.randomUUID() + ".jpg")
+        target.writeBytes(bytes)
+        return target
+    }
+
+    private fun processNextQueuedPhoto() {
+        val file = queuedScanFiles().firstOrNull()
+        if (file == null) {
+            toast("There are no saved photos waiting to be read.")
+            return
+        }
+        if (!hasNetworkConnection()) {
+            toast("Internet is not available yet. Your photo is safe; try again when connected.")
+            return
+        }
+        runAiExtractionBytes(file.readBytes(), file)
+    }
+
     private fun runAiExtraction(uri: Uri) {
         val progress = ProgressDialog(this)
         progress.show()
         Thread {
+            var prepared: ByteArray? = null
             try {
-                val bytes = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-                require(bytes.size <= 10 * 1024 * 1024) { "Image is too large (10 MB maximum)." }
-                val mime = contentResolver.getType(uri) ?: "image/jpeg"
-                require(mime in listOf("image/jpeg", "image/png", "image/webp")) {
-                    "Choose a JPG, PNG or WEBP image."
-                }
-                val prompt = "Read this handwritten shop ledger. Return ONLY JSON with entries array. Each entry: customer_name, date YYYY-MM-DD, description, type credit or payment, amount number. Do not guess unreadable amounts; omit uncertain rows."
-                val parts = JSONArray()
-                    .put(JSONObject().put("text", prompt))
-                    .put(JSONObject().put(
-                        "inline_data",
-                        JSONObject()
-                            .put("mime_type", mime)
-                            .put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
-                    ))
-                val body = JSONObject().put(
-                    "contents",
-                    JSONArray().put(JSONObject().put("parts", parts))
-                )
-                val models = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash")
-                val keys = apiKeys()
-                require(keys.isNotEmpty()) { "Add an AI key in Shop settings first." }
-                var answer: String? = null
-                val failures = ArrayList<String>()
-                for (keyIndex in keys.indices) {
-                    for (model in models) {
-                        var connection: HttpURLConnection? = null
-                        try {
-                            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=" + java.net.URLEncoder.encode(keys[keyIndex], "UTF-8"))
-                            connection = url.openConnection() as HttpURLConnection
-                            connection.requestMethod = "POST"
-                            connection.connectTimeout = 15000; connection.readTimeout = 35000
-                            connection.setRequestProperty("Content-Type", "application/json")
-                            connection.doOutput = true
-                            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-                            val code = connection.responseCode
-                            val response = (if (code in 200..299) connection.inputStream else connection.errorStream)
-                                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-                            if (code !in 200..299) {
-                                failures.add(model + " / key " + (keyIndex + 1) + ": HTTP " + code)
-                                continue
-                            }
-                            val parts = JSONObject(response).optJSONArray("candidates")
-                                ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                            val candidate = parts?.optJSONObject(0)?.optString("text").orEmpty()
-                            if (candidate.isNotBlank()) { answer = candidate; break }
-                            failures.add(model + " / key " + (keyIndex + 1) + ": empty response")
-                        } catch (attempt: Exception) {
-                            failures.add(model + " / key " + (keyIndex + 1) + ": " + (attempt.message ?: "connection error"))
-                        } finally { connection?.disconnect() }
+                prepared = LedgerPhotoProcessor.prepare(contentResolver, uri)
+                if (!hasNetworkConnection()) {
+                    saveQueuedPhoto(prepared)
+                    runOnUiThread {
+                        progress.dismiss()
+                        toast("No internet connection. Your photo was saved and can be read later.")
+                        showHome()
                     }
-                    if (answer != null) break
+                    return@Thread
                 }
-                if (answer == null) {
-                    throw Exception("All AI options failed. Check internet, key limits and API access. Tried " + keys.size + " key(s) and " + models.size + " models. " + failures.takeLast(3).joinToString("; "))
-                }
-                val start = answer.indexOf('{')
-                val end = answer.lastIndexOf('}')
-                require(start >= 0 && end > start) { "No readable entries were returned." }
-                val entries = JSONObject(answer.substring(start, end + 1))
-                    .optJSONArray("entries") ?: JSONArray()
+                val entries = AiLedgerClient(BuildConfig.AI_BACKEND_URL)
+                    .extract(prepared, installIdentifier(), apiKeys())
                 runOnUiThread {
                     progress.dismiss()
                     reviewAiEntries(entries)
@@ -1005,13 +997,65 @@ class MainActivity : Activity() {
             } catch (error: Exception) {
                 runOnUiThread {
                     progress.dismiss()
-                    toast("Photo reading failed: " + (error.message ?: "Check your connection and access key."))
+                    showAiFailure(error, prepared, null)
                 }
             }
         }.start()
     }
 
-    private fun reviewAiEntries(entries: JSONArray) {
+    private fun runAiExtractionBytes(bytes: ByteArray, queuedFile: File?) {
+        val progress = ProgressDialog(this)
+        progress.show()
+        Thread {
+            try {
+                require(hasNetworkConnection()) { "No internet connection. Please reconnect and retry." }
+                val entries = AiLedgerClient(BuildConfig.AI_BACKEND_URL)
+                    .extract(bytes, installIdentifier(), apiKeys())
+                runOnUiThread {
+                    progress.dismiss()
+                    reviewAiEntries(entries, queuedFile)
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    progress.dismiss()
+                    showAiFailure(error, bytes, queuedFile)
+                }
+            }
+        }.start()
+    }
+
+    private fun showAiFailure(error: Exception, photoBytes: ByteArray?, queuedFile: File?) {
+        val networkFailure = error is SocketTimeoutException || error is UnknownHostException ||
+            error is ConnectException || !hasNetworkConnection()
+        val message = when {
+            networkFailure -> "AI Khata could not reach the internet service."
+            error.message?.contains("401") == true || error.message?.contains("403") == true ->
+                "The optional personal AI key is not valid or does not have permission."
+            error.message?.contains("429") == true ->
+                "The AI service has reached its usage limit. Please try again later."
+            error.message?.contains("404") == true ->
+                "That AI model is not available. The app tried its fallback models."
+            error.message?.contains("503") == true ->
+                "The AI service is temporarily unavailable. Please try again."
+            else -> error.message ?: "The photo could not be read."
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Photo reading failed")
+            .setMessage(message + if (queuedFile != null) "\n\nYour saved photo is still waiting. You can retry it later." else "")
+            .setNegativeButton("Close", null)
+        if (queuedFile != null) {
+            dialog.setPositiveButton("Retry") { _, _ -> processNextQueuedPhoto() }
+        } else if (photoBytes != null) {
+            dialog.setPositiveButton("Save for later") { _, _ ->
+                saveQueuedPhoto(photoBytes)
+                toast("Photo saved. You can retry it from the home screen.")
+                showHome()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun reviewAiEntries(entries: JSONArray, queuedFile: File? = null) {
         val rows = ArrayList<JSONObject>()
         val lines = ArrayList<String>()
         for (index in 0 until entries.length()) {
@@ -1059,6 +1103,7 @@ class MainActivity : Activity() {
                             item.getString("date")
                         )
                     }
+                    queuedFile?.delete()
                     toast("Entries added to your khata.")
                     showHome()
                 } catch (error: Exception) {
