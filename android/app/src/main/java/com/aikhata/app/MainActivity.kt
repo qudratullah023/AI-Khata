@@ -630,6 +630,7 @@ class MainActivity : ComponentActivity() {
         button("+ Add credit / sale", { addTransactionDialog(id, "credit") }, true)
         button("Record a payment", { addTransactionDialog(id, "payment") })
         button("Edit customer details", { editCustomerDialog(customer) })
+        button("Merge duplicate customer account", { showMergeCustomerDialog(customer) })
         button("Share account statement", { shareStatement(id) })
         button("Delete this khata", { confirmDeleteCustomer(id) }, danger = true)
         gap(14)
@@ -639,6 +640,42 @@ class MainActivity : ComponentActivity() {
         } else {
             entries.forEach { transactionTile(id, it) }
         }
+    }
+
+    private fun showMergeCustomerDialog(target: CustomerRow) {
+        val possibleDuplicates = db.customers().filter { it.id != target.id }
+        if (possibleDuplicates.isEmpty()) {
+            toast("There are no other customer accounts to merge.")
+            return
+        }
+        val labels = possibleDuplicates.map { customer ->
+            customer.name + if (customer.phone.isBlank()) "" else " · " + customer.phone
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Choose the duplicate account")
+            .setItems(labels) { _, index ->
+                val source = possibleDuplicates[index]
+                AlertDialog.Builder(this)
+                    .setTitle("Merge " + source.name + " into " + target.name + "?")
+                    .setMessage(
+                        "All sales and payments from " + source.name +
+                            " will move into " + target.name +
+                            ". The duplicate account will then be removed. No transaction amounts will be changed."
+                    )
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Merge accounts") { _, _ ->
+                        try {
+                            db.mergeCustomers(source.id, target.id)
+                            toast("Customer accounts merged. All entries were kept.")
+                            showCustomer(target.id)
+                        } catch (error: Exception) {
+                            toast("The accounts could not be merged: " + error.message)
+                        }
+                    }
+                    .show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun transactionTile(customerId: Long, entry: TransactionRow) {
