@@ -2,6 +2,13 @@ plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
 }
+
+def releaseStorePath = System.getenv("AI_KHATA_RELEASE_STORE_FILE")
+def releaseStorePassword = System.getenv("AI_KHATA_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = System.getenv("AI_KHATA_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("AI_KHATA_RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = releaseStorePath && releaseStorePassword && releaseKeyAlias &&
+        releaseKeyPassword && file(releaseStorePath).exists()
 android {
     namespace "com.aikhata.app"
     compileSdk 35
@@ -14,8 +21,21 @@ android {
         buildConfigField "String", "AI_BACKEND_URL", '"https://ai-khata.onrender.com"'
     }
     buildFeatures { buildConfig true }
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources true
             debuggable false
