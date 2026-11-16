@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,7 +45,7 @@ fun CustomersScreen(
 ) {
     val state by viewModel.state.collectAsState()
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).width(720.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).widthIn(max = 720.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = onBack) { Text("Back") }
                 Text("Customers", Modifier.weight(1f).padding(start = 12.dp), fontSize = 23.sp, fontWeight = FontWeight.Bold)
