@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">PEOPLE & ACCOUNTS</div><h1>Customers</h1><p class="muted">Every customer and their current balance, all in one place.</p></div></div>
+<div class="content-grid customer-grid">
+  <section class="panel">
+    <div class="panel-heading"><div><h2>Your customer list</h2><p class="muted">{{ customers|length }} account{{ '' if customers|length == 1 else 's' }}</p></div></div>
+    <form class="search-form" method="get"><span>⌕</span><input name="q" value="{{ query }}" placeholder="Search by name or phone"><button class="button button-secondary button-small" type="submit">Search</button>{% if query %}<a class="clear-search" href="{{ url_for('customers') }}">Clear</a>{% endif %}</form>
+    {% if customers %}
+    <div class="customer-list">{% for customer in customers %}
+      <a class="customer-row" href="{{ url_for('customer_detail', customer_id=customer.id) }}"><span class="customer-avatar">{{ customer.name[:1]|upper }}</span><span class="customer-info"><strong>{{ customer.name }}</strong><small>{{ customer.phone or 'No phone number added' }}</small></span><span class="customer-balance"><strong class="{{ 'balance-positive' if customer.balance > 0 else 'balance-zero' }}">{{ customer.balance|money }}</strong><small>{{ 'To collect' if customer.balance > 0 else 'Settled' if customer.balance == 0 else 'Overpaid' }}</small></span><span class="row-chevron">›</span></a>
+    {% endfor %}</div>
+    {% else %}<div class="empty-state"><span class="empty-icon">♙</span><strong>{{ 'No matching customers' if query else 'No customers yet' }}</strong><p>{{ 'Try a different name or phone number.' if query else 'Add the first customer to begin keeping a digital khata.' }}</p></div>{% endif %}
+  </section>
+  <aside class="panel add-panel"><div class="panel-heading"><div><h2>Add a customer</h2><p class="muted">Create a new khata account</p></div></div>
+    <form action="{{ url_for('customer_new') }}" method="post" class="form-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Customer name<input name="name" maxlength="100" placeholder="e.g. Ahmed Khan" required></label>
+      <label>Phone number <span class="optional">OPTIONAL</span><input name="phone" maxlength="30" type="tel" placeholder="03xx xxxxxxx"></label>
+      <button class="button button-primary button-full" type="submit">Create customer account <span>→</span></button>
+    </form><div class="inline-note">You can add credit and payment entries after creating the customer.</div>
+  </aside>
+</div>
+{% endblock %}
