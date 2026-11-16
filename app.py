@@ -441,7 +441,7 @@ def ai_is_ready():
     provider = ai_provider_name()
     if provider == "openrouter":
         return bool(os.environ.get("OPENROUTER_API_KEY"))
-    return bool(os.environ.get("GEMINI_API_KEY"))
+    return bool(gemini_api_keys())
 
 
 EXTRACTION_PROMPT = """
