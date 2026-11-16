@@ -1,5 +1,6 @@
 import base64
 import json
+import math
 import os
 import re
 import secrets
@@ -142,6 +143,8 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("owner_id"):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Your shop is locked. Please unlock it again."}), 401
             return redirect(url_for("login"))
         return view(*args, **kwargs)
     return wrapped
@@ -377,7 +380,7 @@ def customer_detail(customer_id):
         try:
             amount = round(float(amount_raw), 2)
             date.fromisoformat(transaction_date)
-            if amount <= 0 or amount > 100000000:
+            if not math.isfinite(amount) or amount <= 0 or amount > 100000000:
                 raise ValueError
             if transaction_type not in {"credit", "payment"}:
                 raise ValueError
@@ -545,6 +548,13 @@ def api_extract():
     image_bytes = upload.read(MAX_UPLOAD_BYTES + 1)
     if len(image_bytes) > MAX_UPLOAD_BYTES:
         return jsonify({"error": "The image is larger than 10 MB."}), 413
+    signatures = {
+        "image/jpeg": image_bytes.startswith(b"\xff\xd8\xff"),
+        "image/png": image_bytes.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": len(image_bytes) >= 12 and image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP",
+    }
+    if not signatures.get(mime_type, False):
+        return jsonify({"error": "The file contents do not match the selected image type."}), 400
     if not ai_is_ready():
         return jsonify({"error": "AI is not configured yet. Add a Gemini or OpenRouter API key to the server environment."}), 503
     try:
@@ -562,47 +572,68 @@ def api_extract():
 @app.post("/api/transactions/bulk")
 @login_required
 def api_transactions_bulk():
-    payload = request.get_json(silent=True) or {}
-    entries = payload.get("entries", [])
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Send a valid JSON object containing entries."}), 400
+    entries = payload.get("entries")
     if not isinstance(entries, list) or not entries or len(entries) > 100:
         return jsonify({"error": "Choose at least one and no more than 100 entries."}), 400
-    db = get_db()
-    saved = 0
-    for item in entries:
+
+    # Validate the complete batch before writing anything, so a bad row cannot
+    # leave the shopkeeper with a partially imported page.
+    normalized = []
+    for index, item in enumerate(entries, start=1):
         if not isinstance(item, dict):
-            continue
+            return jsonify({"error": f"Entry {index} is not a valid record."}), 400
         name = str(item.get("customer_name", "")).strip()[:100]
         description = str(item.get("description", "")).strip()[:240]
         kind = str(item.get("type", "credit")).lower()
         try:
             amount = round(float(item.get("amount") or 0), 2)
         except (TypeError, ValueError):
-            continue
-        if not name or amount <= 0 or amount > 100000000 or kind not in {"credit", "payment"}:
-            continue
+            return jsonify({"error": f"Entry {index} has an invalid amount."}), 400
+        if not name:
+            return jsonify({"error": f"Entry {index} needs a customer name."}), 400
+        if not math.isfinite(amount) or amount <= 0 or amount > 100000000:
+            return jsonify({"error": f"Entry {index} needs a valid amount greater than zero."}), 400
+        if kind not in {"credit", "payment"}:
+            return jsonify({"error": f"Entry {index} has an invalid transaction type."}), 400
         transaction_date = str(item.get("date") or date.today().isoformat())
         try:
             date.fromisoformat(transaction_date)
         except ValueError:
-            transaction_date = date.today().isoformat()
-        customer = db.execute("SELECT id FROM customers WHERE name=? COLLATE NOCASE", (name,)).fetchone()
-        if customer:
-            customer_id = customer["id"]
-        else:
-            cur = db.execute(
-                "INSERT INTO customers(name, phone, created_at) VALUES (?, '', ?)",
-                (name, now_iso()),
-            )
-            customer_id = cur.lastrowid
-        db.execute(
-            """INSERT INTO transactions(customer_id, transaction_date, transaction_type, description, amount, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (customer_id, transaction_date, kind, description, amount, now_iso()),
-        )
-        saved += 1
-    db.commit()
-    return jsonify({"saved": saved, "message": f"{saved} ledger entries saved."})
+            return jsonify({"error": f"Entry {index} has an invalid date."}), 400
+        normalized.append((name, description, kind, amount, transaction_date))
 
+    db = get_db()
+    saved = 0
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        for name, description, kind, amount, transaction_date in normalized:
+            customer = db.execute(
+                "SELECT id FROM customers WHERE name=? COLLATE NOCASE", (name,)
+            ).fetchone()
+            if customer:
+                customer_id = customer["id"]
+            else:
+                cur = db.execute(
+                    "INSERT INTO customers(name, phone, created_at) VALUES (?, '', ?)",
+                    (name, now_iso()),
+                )
+                customer_id = cur.lastrowid
+            db.execute(
+                """INSERT INTO transactions(customer_id, transaction_date, transaction_type, description, amount, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (customer_id, transaction_date, kind, description, amount, now_iso()),
+            )
+            saved += 1
+        db.commit()
+    except sqlite3.Error:
+        db.rollback()
+        app.logger.exception("Bulk ledger import failed; the batch was rolled back.")
+        return jsonify({"error": "The entries could not be saved. No entries from this batch were kept."}), 500
+
+    return jsonify({"saved": saved, "message": f"{saved} ledger entries saved."})
 
 @app.get("/reports")
 @login_required
