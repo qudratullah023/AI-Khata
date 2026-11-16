@@ -39,6 +39,12 @@ import com.aikhata.app.data.KhataRepository
 import com.aikhata.app.ui.home.HomeDashboardScreen
 import com.aikhata.app.ui.home.HomeViewModel
 import com.aikhata.app.ui.home.HomeViewModelFactory
+import com.aikhata.app.ui.customers.CustomersScreen
+import com.aikhata.app.ui.customers.CustomersViewModel
+import com.aikhata.app.ui.customers.CustomersViewModelFactory
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.aikhata.app.ui.theme.AiKhataTheme
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
@@ -84,6 +90,7 @@ class MainActivity : FragmentActivity() {
     private var backgroundedAt = 0L
     private var pendingBackupContent: ByteArray? = null
     private var biometricPromptShowing = false
+    private var initialComposeRoute = "home"
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -93,6 +100,9 @@ class MainActivity : FragmentActivity() {
     private val line = Color.rgb(226, 234, 228)
     private val red = Color.rgb(190, 67, 67)
     private val prefs by lazy { getSharedPreferences("ai_khata_secure", MODE_PRIVATE) }
+    private val customersViewModel by lazy {
+        ViewModelProvider(this, CustomersViewModelFactory(KhataRepository(db))).get(CustomersViewModel::class.java)
+    }
     private val homeViewModel by lazy {
         ViewModelProvider(this, HomeViewModelFactory(KhataRepository(db)))
             .get(HomeViewModel::class.java)
@@ -571,27 +581,43 @@ class MainActivity : FragmentActivity() {
         currentScreen = "home"
         backAction = null
         homeViewModel.refresh()
+        customersViewModel.refresh()
         val waitingPhotos = queuedScanFiles().size
+        val startRoute = initialComposeRoute
+        initialComposeRoute = "home"
         setContent {
             AiKhataTheme {
-                val state by homeViewModel.state.collectAsStateWithLifecycle()
-                HomeDashboardScreen(
-                    state = state,
-                    onCustomers = { showCustomers() },
-                    onAddCustomer = { addCustomerDialog() },
-                    onReports = { showReports() },
-                    onScan = { chooseImage() },
-                    onSettings = { showSettings() },
-                    onLock = {
-                        unlocked = false
-                        showUnlock()
-                    },
-                    onBackup = { exportBackup() },
-                    onRetryScans = { processNextQueuedPhoto() },
-                    waitingPhotoCount = waitingPhotos,
-                    onCustomerClick = { showCustomer(it) },
-                    onRefresh = { homeViewModel.refresh() }
-                )
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = startRoute) {
+                    composable("home") {
+                        val state by homeViewModel.state.collectAsStateWithLifecycle()
+                        HomeDashboardScreen(
+                            state = state,
+                            onCustomers = { navController.navigate("customers") },
+                            onAddCustomer = { addCustomerDialog() },
+                            onReports = { showReports() },
+                            onScan = { chooseImage() },
+                            onSettings = { showSettings() },
+                            onLock = {
+                                unlocked = false
+                                showUnlock()
+                            },
+                            onBackup = { exportBackup() },
+                            onRetryScans = { processNextQueuedPhoto() },
+                            waitingPhotoCount = waitingPhotos,
+                            onCustomerClick = { showCustomer(it) },
+                            onRefresh = { homeViewModel.refresh() }
+                        )
+                    }
+                    composable("customers") {
+                        CustomersScreen(
+                            viewModel = customersViewModel,
+                            onBack = { navController.popBackStack() },
+                            onAddCustomer = { addCustomerDialog() },
+                            onCustomerClick = { showCustomer(it) }
+                        )
+                    }
+                }
             }
         }
     }
