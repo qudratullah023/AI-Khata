@@ -168,7 +168,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
     fun monthTotals(month: String): Pair<Double, Double> =
         readableDatabase.rawQuery(
-            "SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0) FROM transactions WHERE substr(transaction_date,1,7)=?",
+            "SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount_paisa ELSE 0 END) / 100.0,0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount_paisa ELSE 0 END) / 100.0,0) FROM transactions WHERE substr(transaction_date,1,7)=?",
             arrayOf(month)
         ).use {
             it.moveToFirst()
