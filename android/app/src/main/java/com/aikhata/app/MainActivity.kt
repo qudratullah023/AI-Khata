@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -22,6 +24,10 @@ import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.net.ConnectException
+import java.util.UUID
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -43,6 +49,7 @@ class MainActivity : Activity() {
     private var lastHomeBack = 0L
     private var sortCustomersByBalance = false
     private var showOnlyDueCustomers = false
+    private var backgroundedAt = 0L
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -56,6 +63,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         db = KhataDatabase(this)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         window.statusBarColor = paper
         window.navigationBarColor = paper
         window.decorView.systemUiVisibility =
@@ -412,6 +420,10 @@ class MainActivity : Activity() {
             unlocked = false
             showUnlock()
         }, danger = true)
+        val waitingPhotos = queuedScanFiles()
+        if (waitingPhotos.isNotEmpty()) {
+            button("Retry saved photo scans (${waitingPhotos.size})", { processNextQueuedPhoto() })
+        }
         gap(12)
         section("Recently active")
         val recent = customers.sortedByDescending { it.id }.take(5)
@@ -791,8 +803,8 @@ class MainActivity : Activity() {
         })
 
         gap(12)
-        section("AI photo reading", "Add one or more Gemini API keys, one per line. If a key or model fails, AI Khata automatically tries the next option.")
-        val api = input("Paste Gemini API key(s), one per line").apply {
+        section("AI photo reading", "AI Khata tries its built-in service first. No key is needed for normal use. Personal Gemini keys are optional advanced backups.")
+        val api = input("Optional personal Gemini key(s), one per line").apply {
             setSingleLine(false); minLines = 2; maxLines = 4
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             gravity = Gravity.TOP
