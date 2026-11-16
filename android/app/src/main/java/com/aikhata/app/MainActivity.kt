@@ -32,6 +32,12 @@ import com.canhub.cropper.CropImageView.RequestSizeOptions
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
+import android.content.res.Configuration
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -191,9 +197,11 @@ class MainActivity : FragmentActivity() {
         })
         db = KhataDatabase(this)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        window.statusBarColor = paper
-        window.navigationBarColor = paper
-        window.decorView.systemUiVisibility =
+        val darkSystemUi = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val systemBarColor = if (darkSystemUi) Color.rgb(8, 15, 24) else Color.rgb(241, 246, 250)
+        window.statusBarColor = systemBarColor
+        window.navigationBarColor = systemBarColor
+        window.decorView.systemUiVisibility = if (darkSystemUi) 0 else
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         if (db.isSetUp()) {
             if (lastCustomNonConfigurationInstance == true) {
@@ -633,7 +641,38 @@ class MainActivity : FragmentActivity() {
                 }
             }
             AiKhataTheme {
-                NavHost(navController = navController, startDestination = startRoute) {
+                NavHost(
+                    navController = navController,
+                    startDestination = startRoute,
+                    enterTransition = {
+                        fadeIn(animationSpec = tween(260)) +
+                            slideInHorizontally(
+                                initialOffsetX = { it / 16 },
+                                animationSpec = tween(340)
+                            )
+                    },
+                    exitTransition = {
+                        fadeOut(animationSpec = tween(180)) +
+                            slideOutHorizontally(
+                                targetOffsetX = { -it / 22 },
+                                animationSpec = tween(260)
+                            )
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(240)) +
+                            slideInHorizontally(
+                                initialOffsetX = { -it / 20 },
+                                animationSpec = tween(300)
+                            )
+                    },
+                    popExitTransition = {
+                        fadeOut(animationSpec = tween(170)) +
+                            slideOutHorizontally(
+                                targetOffsetX = { it / 18 },
+                                animationSpec = tween(250)
+                            )
+                    }
+                ) {
                     composable("home") {
                         val state by homeViewModel.state.collectAsStateWithLifecycle()
                         HomeDashboardScreen(
