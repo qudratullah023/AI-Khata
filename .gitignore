@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+instance/
+*.db
+*.sqlite3
+.DS_Store
+app/build/
+.gradle/
+local.properties
