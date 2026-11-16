@@ -16,11 +16,11 @@ A simple digital khata for shopkeepers. Keep customer accounts, credit sales and
 - Export a backup and restore it when needed.
 - Optionally read a photo of a handwritten ledger with AI. Add multiple Gemini keys; the app automatically retries alternate keys and supported Flash models. Check suggested entries before saving them.
 
-## Offline use
+## Offline use and AI photo reading
 
-Customer accounts, transaction entries, balances, reports, search, edits, deletions and backups are handled on the phone. The app does not require a hosted website or online database.
+Customer accounts, transaction entries, balances, reports, search, edits, deletions and backups are handled on the phone in its private SQLite database. These ledger features do not need an online database.
 
-Handwriting recognition is optional and requires an internet connection and at least one Gemini API key. Multiple keys can be pasted on separate lines; keys are encrypted with Android Keystore. If a model or key returns an error, the app tries other configured keys and compatible Gemini Flash models. Only a photo the shopkeeper deliberately selects for scanning is sent to Google's AI service. The shopkeeper must confirm the suggested entries before they are added.
+AI handwriting recognition needs an internet connection. The app first sends a selected photo to its configured AI Khata backend; the backend must be deployed and have a Gemini API key configured. The app also supports optional personal Gemini keys as an advanced fallback. Personal keys are encrypted with Android Keystore. If a model or key returns an error, the app tries other configured keys and compatible Gemini Flash models. A scan photo is sent only after the shopkeeper deliberately chooses it. The shopkeeper must review and confirm the suggested entries before they are added.
 
 ## Privacy and data
 
