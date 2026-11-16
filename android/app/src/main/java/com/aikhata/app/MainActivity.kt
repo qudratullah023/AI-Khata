@@ -2,6 +2,7 @@ package com.aikhata.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -90,6 +91,64 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun money(value: Double) = "Rs. " + String.format(Locale.US, "%,.2f", value)
     private fun today() = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    private fun parseAmount(raw: String): Double? {
+        val digits = raw.trim().map { ch ->
+            when (ch) {
+                in '۰'..'۹' -> ('0'.code + (ch.code - '۰'.code)).toChar()
+                in '٠'..'٩' -> ('0'.code + (ch.code - '٠'.code)).toChar()
+                else -> ch
+            }
+        }.joinToString("")
+            .replace(",", "")
+            .replace("٬", "")
+            .replace("٫", ".")
+            .replace(" ", "")
+        val value = digits.toDoubleOrNull() ?: return null
+        return value.takeIf { it.isFinite() && it > 0 && it <= 9_000_000_000_000.0 }
+    }
+
+    private fun datePickerButton(initialDate: String, onSelected: (String) -> Unit): TextView {
+        val label = text("Date: $initialDate", 15, green, true).apply {
+            gravity = Gravity.CENTER
+            background = rounded(Color.WHITE, 13, line)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val parts = initialDate.split("-")
+                val year = parts.getOrNull(0)?.toIntOrNull() ?: 2026
+                val month = (parts.getOrNull(1)?.toIntOrNull() ?: 1) - 1
+                val day = parts.getOrNull(2)?.toIntOrNull() ?: 1
+                DatePickerDialog(this@MainActivity, { _, y, m, d ->
+                    val chosen = String.format(Locale.US, "%04d-%02d-%02d", y, m + 1, d)
+                    text = "Date: $chosen"
+                    onSelected(chosen)
+                }, year, month, day).show()
+            }
+        }
+        return label
+    }
+
+    private fun monthPickerButton(initialMonth: String, onSelected: (String) -> Unit): TextView {
+        return text("Month: $initialMonth", 15, green, true).apply {
+            gravity = Gravity.CENTER
+            background = rounded(Color.WHITE, 13, line)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val parts = initialMonth.split("-")
+                val year = parts.getOrNull(0)?.toIntOrNull() ?: 2026
+                val month = (parts.getOrNull(1)?.toIntOrNull() ?: 1) - 1
+                DatePickerDialog(this@MainActivity, { _, y, m, _ ->
+                    val chosen = String.format(Locale.US, "%04d-%02d", y, m + 1)
+                    text = "Month: $chosen"
+                    onSelected(chosen)
+                }, year, month, 1).show()
+            }
+        }
+    }
+
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 
     private fun text(
@@ -550,7 +609,8 @@ class MainActivity : Activity() {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         }
         val description = input("Description / item")
-        val date = input("Date (YYYY-MM-DD)").apply { setText(today()) }
+        var selectedDate = today()
+        val date = datePickerButton(selectedDate) { selectedDate = it }
         box.addView(amount)
         box.addView(description, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         box.addView(date, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
@@ -562,8 +622,8 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(-1).setOnClickListener {
-                val value = amount.text.toString().toDoubleOrNull()
-                val day = date.text.toString().trim()
+                val value = parseAmount(amount.text.toString())
+                val day = selectedDate
                 if (value == null || value <= 0 || !value.isFinite() || !validDate(day)) {
                     toast("Enter a valid amount and date.")
                 } else {
@@ -590,7 +650,8 @@ class MainActivity : Activity() {
             setText(entry.amount.toString())
         }
         val description = input("Description / item").apply { setText(entry.description) }
-        val date = input("Date (YYYY-MM-DD)").apply { setText(entry.date) }
+        var selectedDate = entry.date
+        val date = datePickerButton(selectedDate) { selectedDate = it }
         box.addView(amount)
         box.addView(description, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         box.addView(date, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
@@ -689,14 +750,10 @@ class MainActivity : Activity() {
         card("All-time credit / sales", money(totals.first))
         card("All-time payments received", money(totals.second))
         card("Total amount due", money(totals.first - totals.second))
-        val monthField = input("Month (YYYY-MM)").apply { setText(month) }
+        var selectedMonth = month
         root.addView(text("Choose a month", 13, muted, true))
-        root.addView(monthField)
-        button("View month", {
-            val selected = monthField.text.toString().trim()
-            if (Regex("\\d{4}-(0[1-9]|1[0-2])").matches(selected)) showReports(selected)
-            else toast("Enter the month like 2026-11.")
-        }, true)
+        root.addView(monthPickerButton(selectedMonth) { selectedMonth = it })
+        button("View month", { showReports(selectedMonth) }, true)
         gap(8)
         section("Activity for $month")
         card("Credit / sales", money(monthTotals.first))
