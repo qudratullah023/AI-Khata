@@ -48,7 +48,7 @@ jobs:
         with:
           gradle-version: "8.10.2"
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
       - name: Build debug APK
         env:
           WEB_APP_URL: ${{ inputs.web_app_url || vars.WEB_APP_URL || 'https://ai-khata.onrender.com' }}
