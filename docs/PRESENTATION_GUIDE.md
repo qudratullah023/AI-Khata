@@ -1,61 +1,83 @@
 # AI Khata — University Project Guide
 
-## Problem
-Small shops often record customer credit and repayments in handwritten notebooks. Searching old pages, calculating balances, and preparing monthly summaries can take time. Handwriting may also be difficult to read later.
+## Problem statement
+
+Small shops often record customer credit and repayments in handwritten notebooks. Searching old pages, calculating balances, and preparing monthly summaries takes time. Paper records can be damaged or lost.
 
 ## Proposed solution
-AI Khata provides a private digital ledger. A shopkeeper creates an account, adds customers, records credit and repayments, checks each customer's running balance, and reviews monthly totals. An optional image-reading feature sends a ledger photo to a configured vision AI provider and returns suggested entries for the shopkeeper to review before saving.
 
-## Architecture
+AI Khata is an offline-first Android shop ledger. The shopkeeper creates a private PIN, adds customers, records credit and repayments, views running balances and prepares monthly summaries. The Android app stores all ledger data in a local SQLite database on the phone. It does not require a hosted website or remote database.
 
-1. **HTML** defines the content and forms shown in the browser.
-2. **CSS** controls layout, colours, spacing, typography and responsive design.
-3. **JavaScript** handles image selection, AI extraction requests, editable review rows and chart rendering.
-4. **Python + Flask** handles routes, login, validation, AI-provider requests and application logic.
-5. **SQLite** stores the owner account, customers and transactions during development.
-6. **Gemini / OpenRouter API** optionally reads an uploaded ledger image and returns structured JSON. The key stays on the server.
-7. **Kotlin + Android WebView** packages the hosted web application in an Android installable app.
+An optional AI feature lets the shopkeeper photograph or select a handwritten ledger page. Only when the shopkeeper starts a scan does the app send that selected image to Gemini over the internet. The AI suggests structured entries; the shopkeeper reviews and confirms them before they are saved to the phone.
+
+## Android app architecture
+
+1. **Kotlin** builds the Android screens and handles app behaviour.
+2. **SQLite** stores the shop name, customers and transactions in the app's private local storage.
+3. **PBKDF2 password hashing** stores a salted hash of the shop PIN instead of the readable PIN.
+4. **Android Keystore** encrypts the optional Gemini API key before it is stored in app preferences.
+5. **Gemini API** is called only for an optional image scan. Ordinary ledger use works offline.
+6. **JSON backup and restore** lets the shopkeeper export a local backup file and restore it later.
+
+The repository also retains a separate Flask/browser classroom edition in the root directory. The Android APK does not call or depend on that server.
 
 ## Demonstration sequence
 
-1. Open AI Khata and create the shopkeeper account.
-2. Show that the dashboard is inaccessible without unlocking the account.
-3. Add a customer and record a credit entry.
-4. Record a partial payment and show the updated balance.
-5. Open the customer ledger to explain the transaction history.
-6. Open Reports and show monthly totals.
-7. When a vision API key is configured, select or photograph a sample ledger page, run extraction, correct uncertain fields, and explicitly confirm the entries.
-8. Press Lock and demonstrate that private pages require the shopkeeper's credentials again.
+1. Launch AI Khata. On first use, create the shop name and a six-digit PIN.
+2. Turn off internet or enable airplane mode. Show that the app still opens and works.
+3. Add a customer.
+4. Record a credit/sale for that customer.
+5. Record a partial payment and show the updated outstanding balance.
+6. Open the customer ledger and explain its transaction history.
+7. Open Reports and show all-time and current-month totals.
+8. Open Settings and demonstrate the local PIN change.
+9. Open Settings → Local database backup and export a backup file.
+10. If a Gemini key is configured and internet is available, take or select a sample ledger photo. Review the AI suggestions and explicitly confirm before saving.
+11. Lock the app and demonstrate that the PIN is required again.
 
-## How to explain the balance
+## How the balance is calculated
 
-A **credit** entry means the shop supplied goods or services and the customer owes the shop. A **payment** entry means the customer paid money back. The outstanding balance is the sum of credit entries minus the sum of payments.
+A **credit** entry means the shop supplied goods or services and the customer owes the shop. A **payment** entry means the customer paid money back.
 
-## Security explanation
+Outstanding balance = total credit − total payments.
 
-There is one shopkeeper owner account and no public registration after initial setup. The PIN/password is hashed with Werkzeug's password-hashing utility. Protected routes require an authenticated session. Write requests include CSRF tokens, and repeated incorrect sign-in attempts are temporarily throttled. This is application-level access control, not a replacement for a phone screen lock or production security review.
+Example: a customer receives goods worth Rs. 1,000 and pays Rs. 300. Their outstanding balance is Rs. 700.
+
+## Data privacy and limitations
+
+- Customer names, phone numbers, sales, payments and balances are stored in the app's private SQLite database on the phone.
+- The app does not automatically upload or synchronize ledger data.
+- The Android app has internet permission because the optional Gemini photo-reading feature needs it. Manual ledger screens do not make network requests.
+- When AI scanning is used, the selected image and prompt are sent to Google Gemini. Do not scan sensitive records unless the shopkeeper accepts that transfer.
+- The Gemini API key is encrypted using Android Keystore. It is not included in the APK source or sent to our own server.
+- The SQLite database is protected by Android's app-private storage sandbox, but it is not separately encrypted with SQLCipher. Rooted-device access or advanced forensic access is outside this protection.
+- Uninstalling the app or clearing its storage deletes the local database. Export regular backups before changing phones or uninstalling.
+- A backup file contains shop name, customers and transactions, but not the PIN hash or AI key. The existing local PIN remains in place after a restore.
+- There is no multi-phone synchronization in this offline version.
 
 ## Testing checklist
 
-- First-run setup accepts a valid PIN/password and rejects a short one.
-- Login rejects an incorrect PIN/password.
-- Five failed attempts trigger a temporary lock.
-- Dashboard and customer pages redirect an unauthenticated user to login.
-- Adding a customer works and the customer appears in the list.
+- First launch creates a local shop profile and rejects a short or mismatched PIN.
+- A wrong PIN does not unlock the app.
+- The shop can be locked and unlocked.
+- Customers can be added and searched.
 - Credit increases the outstanding balance.
 - Payment decreases the outstanding balance.
-- Deleting a transaction recalculates the balance.
-- Reports show monthly credit, payment and entry counts.
-- Image extraction rejects unsupported file types and oversized files.
-- Extracted rows are not saved until confirmed.
-- Lock ends the session and protected pages require login again.
+- Customer transaction history displays saved entries.
+- Reports calculate totals from local records.
+- Records remain available after closing and reopening the app.
+- Backup export creates a JSON file.
+- Restore replaces ledger records after explicit confirmation.
+- AI photo extraction is optional and requires internet only when manually started.
+- AI suggestions are not saved until the shopkeeper confirms them.
 
-## Limitations to disclose honestly
+## Technologies in simple language
 
-- Handwriting recognition quality depends on image clarity, language, handwriting and the selected model. Always review extracted figures before saving.
-- AI provider free tiers, model names and rate limits can change.
-- The Android wrapper needs an internet connection and a deployed backend.
-- SQLite on ephemeral free hosting is not appropriate for permanent real-shop data. Use a persistent database and tested backups before a public launch.
+- **Kotlin:** the language used to build the Android application.
+- **SQLite:** a small database that lives on the phone.
+- **Android Keystore:** Android's secure storage for cryptographic keys.
+- **Gemini API:** an optional online AI service used to interpret a photo of handwriting.
+- **JSON:** a structured format used for AI results and local backup files.
 
 ## Team details
 
