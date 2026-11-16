@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -52,6 +53,7 @@ fun FuturisticBackdrop(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.045f)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -77,7 +79,6 @@ fun FuturisticBackdrop(
                 radius = minSide * 0.72f,
                 center = Offset(size.width * 0.02f, size.height * 0.62f)
             )
-            val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.045f)
             val step = 34.dp.toPx()
             var x = 0f
             while (x < size.width) {
