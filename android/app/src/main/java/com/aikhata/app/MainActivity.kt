@@ -3,6 +3,7 @@ package com.aikhata.app
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.res.ColorStateList
@@ -23,6 +24,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -50,6 +55,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraCapture: ActivityResultLauncher<Uri>
     private lateinit var backupCreator: ActivityResultLauncher<String>
     private lateinit var backupPicker: ActivityResultLauncher<Array<String>>
+    private lateinit var notificationPermission: ActivityResultLauncher<String>
     private var backAction: (() -> Unit)? = null
     private var currentScreen = "start"
     private var lastHomeBack = 0L
@@ -83,6 +89,13 @@ class MainActivity : ComponentActivity() {
         backupPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let { readBackupFile(it) }
         }
+        notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        scheduleBackupReminder()
         pendingCameraUri = savedInstanceState?.getString("pending_camera_uri")?.let { Uri.parse(it) }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -382,6 +395,15 @@ class MainActivity : ComponentActivity() {
     private fun section(title: String, detail: String? = null) {
         root.addView(text(title, 17, deepGreen, true))
         if (!detail.isNullOrBlank()) root.addView(text(detail, 13, muted))
+    }
+
+    private fun scheduleBackupReminder() {
+        val request = PeriodicWorkRequestBuilder<BackupReminderWorker>(30, TimeUnit.DAYS).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "ai_khata_monthly_backup_reminder",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
     }
 
     private fun showSetup() {
@@ -933,8 +955,8 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
-        val password = input("Create backup password", true)
-        val confirm = input("Confirm backup password", true)
+        val password = input("Create backup password").apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        val confirm = input("Confirm backup password").apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
         box.addView(password)
         box.addView(confirm, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
         val dialog = AlertDialog.Builder(this)
@@ -988,7 +1010,7 @@ class MainActivity : ComponentActivity() {
                 ?: throw IllegalArgumentException("The backup file could not be opened.")
             val parsed = JSONObject(fileText)
             if (parsed.optString("format") == "ai-khata-encrypted-backup") {
-                val password = input("Backup password", true)
+                val password = input("Backup password").apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
                 AlertDialog.Builder(this)
                     .setTitle("Unlock backup")
                     .setMessage("Enter the password used when this backup was created.")
@@ -1081,9 +1103,10 @@ class MainActivity : ComponentActivity() {
         Thread {
             var prepared: ByteArray? = null
             try {
-                prepared = LedgerPhotoProcessor.prepare(contentResolver, uri)
+                val photoBytes = LedgerPhotoProcessor.prepare(contentResolver, uri)
+                prepared = photoBytes
                 if (!hasNetworkConnection()) {
-                    saveQueuedPhoto(prepared)
+                    saveQueuedPhoto(photoBytes)
                     runOnUiThread {
                         progress.dismiss()
                         toast("No internet connection. Your photo was saved and can be read later.")
@@ -1092,7 +1115,7 @@ class MainActivity : ComponentActivity() {
                     return@Thread
                 }
                 val entries = AiLedgerClient(BuildConfig.AI_BACKEND_URL)
-                    .extract(prepared, installIdentifier(), apiKeys())
+                    .extract(photoBytes, installIdentifier(), apiKeys())
                 runOnUiThread {
                     progress.dismiss()
                     reviewAiEntries(entries)
