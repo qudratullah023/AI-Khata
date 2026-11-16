@@ -28,6 +28,7 @@ import com.canhub.cropper.CropImageContract
 import com.canhub.cropper.CropImageContractOptions
 import com.canhub.cropper.CropImageOptions
 import com.canhub.cropper.CropImageView.Guidelines
+import com.canhub.cropper.CropImageView.RequestSizeOptions
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.OnBackPressedCallback
@@ -1117,7 +1118,10 @@ class MainActivity : FragmentActivity() {
                         toolbarTitleColor = Color.WHITE,
                         toolbarBackButtonColor = Color.WHITE,
                         outputCompressFormat = Bitmap.CompressFormat.JPEG,
-                        outputCompressQuality = 88
+                        outputCompressQuality = 88,
+                        outputRequestWidth = 1600,
+                        outputRequestHeight = 1600,
+                        outputRequestSizeOptions = RequestSizeOptions.RESIZE_INSIDE
                     )
                 )
             )
