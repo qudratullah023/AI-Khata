@@ -31,6 +31,15 @@ import com.canhub.cropper.CropImageView.Guidelines
 import com.canhub.cropper.CropImageView.RequestSizeOptions
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
+import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import com.aikhata.app.data.KhataRepository
+import com.aikhata.app.ui.home.HomeDashboardScreen
+import com.aikhata.app.ui.home.HomeViewModel
+import com.aikhata.app.ui.home.HomeViewModelFactory
+import com.aikhata.app.ui.theme.AiKhataTheme
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +93,11 @@ class MainActivity : FragmentActivity() {
     private val line = Color.rgb(226, 234, 228)
     private val red = Color.rgb(190, 67, 67)
     private val prefs by lazy { getSharedPreferences("ai_khata_secure", MODE_PRIVATE) }
+    private val homeViewModel by lazy {
+        ViewModelProvider(this, HomeViewModelFactory(KhataRepository(db)))
+            .get(HomeViewModel::class.java)
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -554,49 +568,31 @@ class MainActivity : FragmentActivity() {
 
     private fun showHome() {
         if (!guard()) return
-        val totals = db.totals()
-        val month = db.monthTotals(today().take(7))
-        val customers = db.customers()
-        page(db.shopName(), "Your shop at a glance.")
         currentScreen = "home"
-        card(
-            "Total amount customers owe",
-            money(totals.first - totals.second),
-            "Sales on credit " + money(totals.first) + "  ·  Payments " + money(totals.second)
-        )
-        card(
-            "This month",
-            money(month.first) + " in sales",
-            money(month.second) + " received in payments"
-        )
-        card("Customer accounts", customers.size.toString(), totals.third.toString() + " entries recorded")
-        gap(10)
-        button("Customers & khata books", { showCustomers() }, true)
-        button("Add a new customer", { addCustomerDialog() })
-        button("Monthly reports", { showReports() })
-        button("Read a handwritten khata photo", { chooseImage() })
-        button("Shop settings", { showSettings() })
-        button("Lock the app", {
-            unlocked = false
-            showUnlock()
-        }, danger = true)
-        val lastBackup = prefs.getLong("last_backup_at", 0L)
-        val backupIsDue = lastBackup == 0L ||
-            System.currentTimeMillis() - lastBackup >= 30L * 24 * 60 * 60 * 1000
-        if (backupIsDue) {
-            button("Create a password-protected backup", { exportBackup() })
-        }
-        val waitingPhotos = queuedScanFiles()
-        if (waitingPhotos.isNotEmpty()) {
-            button("Retry saved photo scans (${waitingPhotos.size})", { processNextQueuedPhoto() })
-        }
-        gap(12)
-        section("Recently active")
-        val recent = customers.sortedByDescending { it.id }.take(5)
-        if (recent.isEmpty()) {
-            root.addView(text("Your customer accounts will appear here.", 14, muted))
-        } else {
-            recent.forEach { customerTile(it) }
+        backAction = null
+        homeViewModel.refresh()
+        val waitingPhotos = queuedScanFiles().size
+        setContent {
+            AiKhataTheme {
+                val state by homeViewModel.state.collectAsStateWithLifecycle()
+                HomeDashboardScreen(
+                    state = state,
+                    onCustomers = { showCustomers() },
+                    onAddCustomer = { addCustomerDialog() },
+                    onReports = { showReports() },
+                    onScan = { chooseImage() },
+                    onSettings = { showSettings() },
+                    onLock = {
+                        unlocked = false
+                        showUnlock()
+                    },
+                    onBackup = { exportBackup() },
+                    onRetryScans = { processNextQueuedPhoto() },
+                    waitingPhotoCount = waitingPhotos,
+                    onCustomerClick = { showCustomer(it) },
+                    onRefresh = { homeViewModel.refresh() }
+                )
+            }
         }
     }
 
