@@ -15,7 +15,7 @@ object LedgerMath {
             .replace(",", "")
             .replace("٬", "")
             .replace("٫", ".")
-            .replace(" ", "")
+            .replace(Regex("\\s+"), "")
 
         val amount = normalized.toDoubleOrNull() ?: return null
         return amount.takeIf {
