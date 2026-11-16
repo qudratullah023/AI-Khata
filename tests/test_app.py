@@ -4,6 +4,7 @@ Run with: python -m unittest discover -s tests -v
 """
 import io
 import os
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -200,6 +201,61 @@ class AIKhataTests(unittest.TestCase):
         finally:
             khata.MOBILE_RATE_LIMIT_PER_HOUR = previous_limit
             khata._mobile_requests.clear()
+
+    def test_gemini_key_list_splits_commas_semicolons_and_newlines(self):
+        with patch.dict(os.environ, {
+            "GEMINI_API_KEYS": "first-key; second-key\\nthird-key",
+            "GEMINI_API_KEY": "fourth-key",
+        }, clear=False):
+            keys = khata.gemini_api_keys()
+        self.assertEqual(keys, ["first-key", "second-key", "third-key", "fourth-key"])
+
+    def test_gemini_tries_another_key_and_sends_key_in_header(self):
+        first = type("Response", (), {"status_code": 403})()
+        second = type("Response", (), {"status_code": 404})()
+        third = type("Response", (), {
+            "status_code": 200,
+            "json": lambda self: {"candidates": [{"content": {"parts": [{"text": '{"entries":[]}'}]}}]},
+        })()
+        with patch.dict(os.environ, {
+            "GEMINI_API_KEYS": "bad-key; good-key",
+            "GEMINI_API_KEY": "",
+            "GEMINI_MODELS": "model-one,model-two",
+        }), patch.object(khata.requests, "post", side_effect=[first, second, third]) as request:
+            answer = khata.extract_with_gemini(b"image-bytes", "image/jpeg")
+        self.assertIn('"entries"', answer)
+        self.assertEqual(request.call_args_list[0].kwargs["headers"]["x-goog-api-key"], "bad-key")
+        self.assertEqual(request.call_args_list[2].kwargs["headers"]["x-goog-api-key"], "good-key")
+        self.assertNotIn("key=", request.call_args_list[2].args[0])
+        self.assertIn("responseSchema", request.call_args_list[2].kwargs["json"]["generationConfig"])
+
+    def test_integer_paisa_migration_preserves_customer_and_transaction_ids(self):
+        db = sqlite3.connect(":memory:")
+        db.execute("PRAGMA foreign_keys = ON")
+        db.execute("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+        db.execute(
+            "CREATE TABLE transactions (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL, description TEXT NOT NULL, amount REAL NOT NULL, created_at TEXT NOT NULL)"
+        )
+        db.execute("INSERT INTO customers(id, name) VALUES (7, 'Amina')")
+        db.execute(
+            "INSERT INTO transactions(id, customer_id, transaction_date, transaction_type, description, amount, created_at) VALUES (19, 7, '2026-11-16', 'credit', 'Rice', 1234.50, '2026-11-16T10:00:00')"
+        )
+        db.execute(
+            "CREATE TABLE transactions_new (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL, description TEXT NOT NULL, amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)"
+        )
+        db.execute(
+            "INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, CAST(ROUND(amount * 100) AS INTEGER), created_at FROM transactions WHERE amount > 0"
+        )
+        db.execute("DROP TABLE transactions")
+        db.execute("ALTER TABLE transactions_new RENAME TO transactions")
+        db.execute("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
+        row = db.execute(
+            "SELECT id, customer_id, amount_paisa, description FROM transactions"
+        ).fetchone()
+        self.assertEqual(row, (19, 7, 123450, "Rice"))
+        self.assertEqual(db.execute("SELECT name FROM customers WHERE id=7").fetchone()[0], "Amina")
+        self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        db.close()
 
     def test_uploaded_file_must_really_be_an_image(self):
         self.create_owner()
