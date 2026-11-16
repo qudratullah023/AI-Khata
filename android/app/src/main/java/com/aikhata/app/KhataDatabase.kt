@@ -216,6 +216,14 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
             Pair(it.getDouble(0), it.getDouble(1))
         }
 
+    fun monthTransactionCount(month: String): Int =
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM transactions WHERE substr(transaction_date,1,7)=?",
+            arrayOf(month)
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
+
     fun exportBackup(): String {
         val root = org.json.JSONObject()
             .put("format", "ai-khata-backup")
