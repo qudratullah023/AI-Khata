@@ -60,6 +60,56 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         }
     fun totals():Triple<Double,Double,Int> = readableDatabase.rawQuery("SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0),COUNT(*) FROM transactions",null).use { it.moveToFirst();Triple(it.getDouble(0),it.getDouble(1),it.getInt(2)) }
     fun monthTotals(month:String):Pair<Double,Double> = readableDatabase.rawQuery("SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0) FROM transactions WHERE substr(transaction_date,1,7)=?",arrayOf(month)).use { it.moveToFirst();Pair(it.getDouble(0),it.getDouble(1)) }
+    fun exportBackup(): String {
+        val root=org.json.JSONObject().put("format","ai-khata-backup").put("version",1).put("shop_name",shopName()).put("exported_at",now())
+        val people=org.json.JSONArray()
+        customers().forEach { customer ->
+            val person=org.json.JSONObject().put("name",customer.name).put("phone",customer.phone)
+            val entries=org.json.JSONArray()
+            transactions(customer.id).forEach { tx ->
+                entries.put(org.json.JSONObject().put("date",tx.date).put("type",tx.type).put("description",tx.description).put("amount",tx.amount))
+            }
+            person.put("transactions",entries);people.put(person)
+        }
+        root.put("customers",people)
+        return root.toString(2)
+    }
+
+    fun restoreBackup(json:String) {
+        val root=org.json.JSONObject(json)
+        require(root.optString("format")=="ai-khata-backup" && root.optInt("version")==1) { "This is not a supported AI Khata backup." }
+        val people=root.optJSONArray("customers") ?: throw IllegalArgumentException("Backup has no customer list.")
+        val db=writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("transactions",null,null)
+            db.delete("customers",null,null)
+            val shop=root.optString("shop_name","My shop").take(80)
+            db.execSQL("UPDATE owner SET shop_name=? WHERE id=1",arrayOf(shop))
+            for(i in 0 until people.length()) {
+                val person=people.optJSONObject(i) ?: continue
+                val name=person.optString("name").trim()
+                if(name.isBlank()) continue
+                val cv=ContentValues().apply { put("name",name);put("phone",person.optString("phone").take(30));put("created_at",now()) }
+                val customerId=db.insertOrThrow("customers",null,cv)
+                val entries=person.optJSONArray("transactions") ?: org.json.JSONArray()
+                for(j in 0 until entries.length()) {
+                    val tx=entries.optJSONObject(j) ?: continue
+                    val type=tx.optString("type")
+                    val amount=tx.optDouble("amount",Double.NaN)
+                    val day=tx.optString("date")
+                    if(type !in listOf("credit","payment") || !amount.isFinite() || amount<=0 || !day.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) continue
+                    val tv=ContentValues().apply {
+                        put("customer_id",customerId);put("transaction_date",day);put("transaction_type",type)
+                        put("description",tx.optString("description").take(240));put("amount",amount);put("created_at",now())
+                    }
+                    db.insertOrThrow("transactions",null,tv)
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
     private fun derive(pin:String,salt:ByteArray)=SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(pin.toCharArray(),salt,120000,256)).encoded
     private fun ByteArray.hex()=joinToString(""){"%02x".format(it)}
     private fun String.unhex()=chunked(2).map{it.toInt(16).toByte()}.toByteArray()
