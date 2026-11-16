@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Unlock your shop{% endblock %}
+{% block auth_content %}
+<section class="auth-card">
+  <div class="eyebrow"><span class="status-dot"></span> SHOP LOCKED</div>
+  <h1>Welcome back.</h1>
+  <p class="muted">Your shop ledger is locked. Enter your shopkeeper credentials to continue.</p>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username<input name="username" placeholder="Shopkeeper username" required autocomplete="username"></label>
+    <label>PIN or password<input type="password" name="passcode" placeholder="Your private access code" required autocomplete="current-password"></label>
+    <button class="button button-primary button-full" type="submit">Unlock my shop <span>→</span></button>
+  </form>
+  <div class="security-note"><span>⌑</span><div><strong>Protected workspace</strong><small>Five failed attempts temporarily pause sign-in for security.</small></div></div>
+</section>
+{% endblock %}
