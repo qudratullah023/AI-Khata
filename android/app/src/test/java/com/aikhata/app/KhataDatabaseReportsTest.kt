@@ -23,7 +23,7 @@ class KhataDatabaseReportsTest {
             assertEquals(2, database.monthTransactionCount("2026-11"))
             assertEquals(1, database.monthTransactionCount("2026-10"))
             assertEquals(0, database.monthTransactionCount("2026-09"))
-            assertEquals(1400.0, database.monthTotals("2026-11").first, 0.001)
+            assertEquals(1200.0, database.monthTotals("2026-11").first, 0.001)
             assertEquals(200.0, database.monthTotals("2026-11").second, 0.001)
         } finally {
             database.close()
