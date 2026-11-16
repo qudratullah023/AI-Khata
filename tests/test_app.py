@@ -112,6 +112,64 @@ class AIKhataTests(unittest.TestCase):
         )
         self.assertEqual([(r["transaction_type"], r["amount"]) for r in rows], [("credit", 500.0), ("payment", 200.0)])
 
+    def test_manual_credit_and_payment_calculate_the_balance(self):
+        self.create_owner()
+        token = self.csrf(self.client, "/dashboard")
+        created = self.client.post(
+            "/customers/new",
+            data={"csrf_token": token, "name": "Hassan", "phone": "03001234567"},
+        )
+        self.assertEqual(created.status_code, 302)
+        self.client.post(
+            "/customers/1",
+            data={
+                "csrf_token": token, "transaction_type": "credit",
+                "amount": "750.00", "transaction_date": "2026-11-16", "description": "Flour",
+            },
+        )
+        self.client.post(
+            "/customers/1",
+            data={
+                "csrf_token": token, "transaction_type": "payment",
+                "amount": "250.00", "transaction_date": "2026-11-16", "description": "Cash received",
+            },
+        )
+        rows = self.db_rows(
+            """SELECT
+                 SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END) AS credits,
+                 SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END) AS payments
+               FROM transactions"""
+        )
+        self.assertEqual(rows[0]["credits"] - rows[0]["payments"], 500.0)
+
+    def test_access_code_change_requires_current_code(self):
+        self.create_owner()
+        account = self.db_rows("SELECT password_hash FROM owner WHERE id=1")[0]
+        token = self.csrf(self.client, "/settings")
+        denied = self.client.post(
+            "/settings",
+            data={
+                "csrf_token": token, "shop_name": "Noor General Store",
+                "current_passcode": "incorrect", "new_passcode": "654321",
+                "confirm_passcode": "654321",
+            },
+        )
+        self.assertEqual(denied.status_code, 302)
+        unchanged = self.db_rows("SELECT password_hash FROM owner WHERE id=1")[0]
+        self.assertEqual(account["password_hash"], unchanged["password_hash"])
+
+        self.client.post(
+            "/settings",
+            data={
+                "csrf_token": token, "shop_name": "Noor General Store",
+                "current_passcode": "123456", "new_passcode": "654321",
+                "confirm_passcode": "654321",
+            },
+        )
+        changed = self.db_rows("SELECT password_hash FROM owner WHERE id=1")[0]
+        self.assertTrue(khata.check_password_hash(changed["password_hash"], "654321"))
+        self.assertFalse(khata.check_password_hash(changed["password_hash"], "123456"))
+
     def test_uploaded_file_must_really_be_an_image(self):
         self.create_owner()
         token = self.csrf(self.client, "/dashboard")
