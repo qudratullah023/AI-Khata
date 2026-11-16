@@ -12,7 +12,7 @@ import javax.crypto.spec.PBEKeySpec
 data class CustomerRow(val id: Long, val name: String, val phone: String, val balance: Double)
 data class TransactionRow(val id: Long, val date: String, val type: String, val description: String, val amount: Double)
 
-class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_local.db", null, 1) {
+class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_local.db", null, 2) {
     override fun onConfigure(db: SQLiteDatabase) {
         db.setForeignKeyConstraintsEnabled(true)
     }
@@ -20,11 +20,20 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE owner (id INTEGER PRIMARY KEY CHECK(id=1), shop_name TEXT NOT NULL, pin_salt TEXT NOT NULL, pin_hash TEXT NOT NULL, created_at TEXT NOT NULL)")
         db.execSQL("CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK(transaction_type IN ('credit','payment')), description TEXT NOT NULL DEFAULT '', amount REAL NOT NULL CHECK(amount > 0), created_at TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK(transaction_type IN ('credit','payment')), description TEXT NOT NULL DEFAULT '', amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)")
         db.execSQL("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            // Convert stored rupees to integer paisa while preserving record IDs.
+            db.execSQL("CREATE TABLE transactions_new (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK(transaction_type IN ('credit','payment')), description TEXT NOT NULL DEFAULT '', amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)")
+            db.execSQL("INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, CAST(ROUND(amount * 100) AS INTEGER), created_at FROM transactions WHERE amount > 0")
+            db.execSQL("DROP TABLE transactions")
+            db.execSQL("ALTER TABLE transactions_new RENAME TO transactions")
+            db.execSQL("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
+        }
+    }
 
     fun isSetUp() = readableDatabase.rawQuery("SELECT 1 FROM owner WHERE id=1", null).use { it.moveToFirst() }
 
@@ -90,7 +99,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     fun customers(query: String = ""): List<CustomerRow> =
         readableDatabase.rawQuery(
             """SELECT c.id,c.name,c.phone,
-            COALESCE(SUM(CASE WHEN t.transaction_type='credit' THEN t.amount ELSE -t.amount END),0)
+            COALESCE(SUM(CASE WHEN t.transaction_type='credit' THEN t.amount_paisa ELSE -t.amount_paisa END) / 100.0,0)
             FROM customers c LEFT JOIN transactions t ON t.customer_id=c.id
             WHERE c.name LIKE ? OR c.phone LIKE ?
             GROUP BY c.id ORDER BY c.name COLLATE NOCASE""",
@@ -113,7 +122,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
             put("transaction_date", date)
             put("transaction_type", type)
             put("description", description.trim())
-            put("amount", amount)
+            put("amount_paisa", toPaisa(amount))
             put("created_at", now())
         }
         writableDatabase.insertOrThrow("transactions", null, values)
@@ -122,7 +131,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     fun updateTransaction(id: Long, amount: Double, description: String, date: String) {
         require(amount > 0 && amount.isFinite())
         val values = ContentValues().apply {
-            put("amount", amount)
+            put("amount_paisa", toPaisa(amount))
             put("description", description.trim())
             put("transaction_date", date)
         }
@@ -135,14 +144,14 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
     fun transactions(id: Long): List<TransactionRow> =
         readableDatabase.rawQuery(
-            "SELECT id,transaction_date,transaction_type,description,amount FROM transactions WHERE customer_id=? ORDER BY transaction_date DESC,id DESC",
+            "SELECT id,transaction_date,transaction_type,description,amount_paisa FROM transactions WHERE customer_id=? ORDER BY transaction_date DESC,id DESC",
             arrayOf(id.toString())
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
                     add(TransactionRow(
                         cursor.getLong(0), cursor.getString(1), cursor.getString(2),
-                        cursor.getString(3), cursor.getDouble(4)
+                        cursor.getString(3), cursor.getLong(4) / 100.0
                     ))
                 }
             }
@@ -150,7 +159,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
     fun totals(): Triple<Double, Double, Int> =
         readableDatabase.rawQuery(
-            "SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount ELSE 0 END),0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount ELSE 0 END),0),COUNT(*) FROM transactions",
+            "SELECT COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount_paisa ELSE 0 END) / 100.0,0),COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount_paisa ELSE 0 END) / 100.0,0),COUNT(*) FROM transactions",
             null
         ).use {
             it.moveToFirst()
@@ -229,7 +238,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
                         put("transaction_date", day)
                         put("transaction_type", type)
                         put("description", tx.optString("description").take(240))
-                        put("amount", amount)
+                        put("amount_paisa", toPaisa(amount))
                         put("created_at", now())
                     }
                     db.insertOrThrow("transactions", null, values)
@@ -238,6 +247,13 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    private fun toPaisa(amount: Double): Long {
+        require(amount > 0 && amount.isFinite() && amount <= 9_000_000_000_000.0)
+        return kotlin.math.round(amount * 100.0).toLong().also {
+            require(it > 0) { "The amount is too small." }
         }
     }
 
