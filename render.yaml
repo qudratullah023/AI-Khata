@@ -15,3 +15,9 @@ services:
         value: "1"
       - key: AI_PROVIDER
         value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODELS
+        value: gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash
+      - key: MOBILE_RATE_LIMIT_PER_HOUR
+        value: "8"
