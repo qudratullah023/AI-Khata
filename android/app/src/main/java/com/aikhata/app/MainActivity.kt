@@ -158,7 +158,7 @@ class MainActivity : Activity() {
                 }.start()
             }.start()
         }
-        minHeight = dp(height)
+        minimumHeight = dp(height)
     }
 
     private fun button(
@@ -588,9 +588,11 @@ class MainActivity : Activity() {
     private fun confirmDeleteTransaction(customerId: Long, entry: TransactionRow) {
         AlertDialog.Builder(this)
             .setTitle("Delete this entry?")
-            .setMessage("This will permanently remove the " + money(entry.amount) +
-                " " + if (entry.type == "credit") "credit / sale" else "payment" +
-                " entry from this customer's khata.")
+            .setMessage(
+                "This will permanently remove the " + money(entry.amount) +
+                    (if (entry.type == "credit") " credit / sale" else " payment") +
+                    " entry from this customer's khata."
+            )
             .setNegativeButton("Keep entry", null)
             .setPositiveButton("Delete") { _, _ ->
                 db.deleteTransaction(entry.id)
