@@ -22,7 +22,7 @@ class CustomerDetailViewModel(private val repository: KhataRepository) : ViewMod
 
     fun load(customerId: Long) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
+            _state.value = CustomerDetailUiState(loading = true)
             try {
                 val detail = repository.loadCustomerDetail(customerId)
                 _state.value = CustomerDetailUiState(
