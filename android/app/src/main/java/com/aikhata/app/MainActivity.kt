@@ -906,15 +906,6 @@ class MainActivity : ComponentActivity() {
 
     private fun chooseImage() {
         if (!guard()) return
-        if (!hasApiKey()) {
-            AlertDialog.Builder(this)
-                .setTitle("Set up photo reading")
-                .setMessage("Add your AI access key in Settings before reading a handwritten khata photo.")
-                .setPositiveButton("Open settings") { _, _ -> showSettings() }
-                .setNegativeButton("Cancel", null)
-                .show()
-            return
-        }
         AlertDialog.Builder(this)
             .setTitle("Choose a khata photo")
             .setItems(arrayOf("Take a new photo", "Choose from gallery")) { _, which ->
@@ -924,69 +915,61 @@ class MainActivity : ComponentActivity() {
                         pendingCameraUri = FileProvider.getUriForFile(
                             this, packageName + ".fileprovider", photo
                         )
-                        val camera = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                            putExtra(MediaStore.EXTRA_OUTPUT, pendingCameraUri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                        }
-                        startActivityForResult(camera, 80)
+                        cameraCapture.launch(pendingCameraUri!!)
                     } catch (error: Exception) {
+                        pendingCameraUri = null
                         toast("Could not open the camera.")
                     }
                 } else {
-                    startActivityForResult(
-                        Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "image/*"
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                        }, 77
-                    )
+                    imagePicker.launch("image/*")
                 }
             }
             .show()
     }
 
-    @Deprecated("Uses legacy result API for Android 10 compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 80) {
-            val uri = if (resultCode == RESULT_OK) pendingCameraUri else null
-            pendingCameraUri = null
-            if (uri != null) runAiExtraction(uri)
-            return
+    private fun exportBackup() {
+        backupCreator.launch("my-shop-khata-backup.json")
+    }
+
+    private fun importBackup() {
+        backupPicker.launch(arrayOf("application/json", "application/octet-stream"))
+    }
+
+    private fun writeBackupFile(uri: Uri) {
+        try {
+            contentResolver.openOutputStream(uri)?.use {
+                it.write(db.exportBackup().toByteArray(Charsets.UTF_8))
+            }
+            toast("Backup exported. Keep it somewhere safe.")
+        } catch (error: Exception) {
+            toast("Backup export failed.")
         }
-        if (resultCode != RESULT_OK || data?.data == null) return
-        when (requestCode) {
-            77 -> runAiExtraction(data.data!!)
-            78 -> try {
-                contentResolver.openOutputStream(data.data!!)?.use {
-                    it.write(db.exportBackup().toByteArray(Charsets.UTF_8))
-                }
-                toast("Backup exported. Keep it somewhere safe.")
-            } catch (error: Exception) {
-                toast("Backup export failed.")
+    }
+
+    private fun readBackupFile(uri: Uri) {
+        try {
+            val json = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: throw IllegalArgumentException("The backup file could not be opened.")
+            val parsed = JSONObject(json)
+            if (parsed.optString("format") != "ai-khata-backup") {
+                throw IllegalArgumentException("This is not an AI Khata backup.")
             }
-            79 -> try {
-                val json = contentResolver.openInputStream(data.data!!)!!.bufferedReader().use { it.readText() }
-                val parsed = JSONObject(json)
-                if (parsed.optString("format") != "ai-khata-backup") {
-                    throw IllegalArgumentException("This is not an AI Khata backup.")
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("Restore this backup?")
-                    .setMessage("Restoring will replace the customer accounts and entries currently in this app. Export a backup of your current records first if you need them.")
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Restore") { _, _ ->
-                        try {
-                            db.restoreBackup(json)
-                            toast("Your backup has been restored.")
-                            showHome()
-                        } catch (error: Exception) {
-                            toast("Backup could not be restored: " + error.message)
-                        }
+            AlertDialog.Builder(this)
+                .setTitle("Restore this backup?")
+                .setMessage("Restoring will replace the customer accounts and entries currently in this app. Export a backup of your current records first if you need them.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restore") { _, _ ->
+                    try {
+                        db.restoreBackup(json)
+                        toast("Your backup has been restored.")
+                        showHome()
+                    } catch (error: Exception) {
+                        toast("Backup could not be restored: " + error.message)
                     }
-                    .show()
-            } catch (error: Exception) {
-                toast("Could not read this backup file.")
-            }
+                }
+                .show()
+        } catch (error: Exception) {
+            toast("Could not read this backup file: " + (error.message ?: "Please check the file."))
         }
     }
 
