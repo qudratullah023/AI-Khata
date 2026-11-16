@@ -468,7 +468,7 @@ def gemini_api_keys():
 def extract_with_gemini(image_bytes, mime_type):
     keys = gemini_api_keys()
     if not keys:
-        raise RuntimeError("Gemini is not configured on the server.")
+        raise RuntimeError("AI_NOT_CONFIGURED: No Gemini key is configured on the server.")
     models = [
         part.strip() for part in os.environ.get(
             "GEMINI_MODELS",
@@ -498,6 +498,8 @@ def extract_with_gemini(image_bytes, mime_type):
         "required": ["entries"],
     }
     failures = []
+    statuses = []
+    timeout_count = 0
     for key in keys:
         for model in models:
             endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -519,14 +521,28 @@ def extract_with_gemini(image_bytes, mime_type):
                     timeout=70,
                 )
                 if response.status_code >= 400:
+                    statuses.append(response.status_code)
                     failures.append(f"{model}: HTTP {response.status_code}")
                     continue
                 payload = response.json()
                 return payload["candidates"][0]["content"]["parts"][0]["text"]
-            except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
-                failures.append(f"{model}: {type(exc).__name__}")
-    raise RuntimeError("All configured Gemini keys and fallback models failed: " + ", ".join(failures[-6:]))
+            except requests.Timeout:
+                timeout_count += 1
+                failures.append(f"{model}: timeout")
+            except requests.RequestException as exc:
+                failures.append(f"{model}: network error ({type(exc).__name__})")
+            except (KeyError, IndexError, ValueError) as exc:
+                failures.append(f"{model}: invalid AI response ({type(exc).__name__})")
 
+    if statuses and all(code in (401, 403) for code in statuses):
+        raise RuntimeError("AI_INVALID_KEY: The configured Gemini key is invalid or not allowed to use this model.")
+    if 429 in statuses:
+        raise RuntimeError("AI_QUOTA: The configured Gemini service has reached its request or quota limit.")
+    if timeout_count == len(failures) and timeout_count > 0:
+        raise TimeoutError("AI_TIMEOUT: The AI service took too long to respond.")
+    if statuses and all(code == 404 for code in statuses):
+        raise RuntimeError("AI_MODEL_UNAVAILABLE: None of the configured Gemini model names is available.")
+    raise RuntimeError("AI_TEMPORARILY_UNAVAILABLE: All configured Gemini models failed. " + ", ".join(failures[-6:]))
 
 def extract_with_openrouter(image_bytes, mime_type):
     model = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash")
@@ -582,12 +598,17 @@ def parse_ai_json(raw_text):
             date.fromisoformat(raw_date)
         except ValueError:
             raw_date = ""
+        try:
+            confidence = float(item.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
         safe_entries.append({
             "customer_name": str(item.get("customer_name", "")).strip()[:100],
             "date": raw_date,
             "description": str(item.get("description", "")).strip()[:240],
             "amount": max(0, amount),
             "type": kind,
+            "confidence": min(1.0, max(0.0, confidence)),
         })
     return safe_entries
 
@@ -647,8 +668,17 @@ def api_mobile_extract():
             message = "The AI service could not process this photo. Please retry."
         return jsonify({"error": message}), 502
     except RuntimeError as exc:
-        app.logger.warning("Mobile AI fallback exhausted: %s", exc)
-        return jsonify({"error": "All available AI models are temporarily unavailable. Please retry later."}), 502
+        detail = str(exc)
+        app.logger.warning("Mobile AI fallback exhausted: %s", detail)
+        if detail.startswith("AI_INVALID_KEY:"):
+            return jsonify({"error": "The AI service key is invalid or does not have access. The service owner must update it."}), 503
+        if detail.startswith("AI_QUOTA:"):
+            return jsonify({"error": "The AI service has reached its usage limit. Please try again later."}), 429
+        if detail.startswith("AI_MODEL_UNAVAILABLE:"):
+            return jsonify({"error": "The configured AI models are unavailable. The service owner must update the model list."}), 503
+        if detail.startswith("AI_NOT_CONFIGURED:"):
+            return jsonify({"error": "AI photo reading has not been enabled on the service yet."}), 503
+        return jsonify({"error": "The AI service is temporarily unavailable. Please retry later."}), 503
     except (requests.RequestException, KeyError, IndexError, ValueError, json.JSONDecodeError):
         app.logger.exception("Mobile AI extraction failed")
         return jsonify({"error": "We could not read this photo. Try a brighter, clearer picture."}), 502
