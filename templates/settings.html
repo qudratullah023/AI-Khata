@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Shop settings{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">YOUR ACCOUNT & PREFERENCES</div><h1>Shop settings</h1><p class="muted">Keep your store details and access code up to date.</p></div></div>
+<div class="settings-grid">
+<section class="panel settings-panel"><div class="panel-heading"><div><h2>Shopkeeper access</h2><p class="muted">Only the shopkeeper should know this access code.</p></div><span class="secure-badge">⌑ Protected</span></div>
+<form method="post" class="form-stack">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Shop name<input name="shop_name" maxlength="80" value="{{ shop.shop_name }}" required></label>
+<div class="divider"></div><h3>Change PIN or password</h3>
+<label>Current PIN or password<input type="password" name="current_passcode" autocomplete="current-password" required></label>
+<label>New PIN or password <span class="optional">LEAVE BLANK TO KEEP CURRENT</span><input type="password" name="new_passcode" autocomplete="new-password" placeholder="6+ digits or 8+ characters"></label>
+<label>Confirm new PIN or password<input type="password" name="confirm_passcode" autocomplete="new-password" placeholder="Repeat new access code"></label>
+<button class="button button-primary" type="submit">Save shop settings</button>
+</form>
+</section>
+<section class="panel settings-panel"><div class="panel-heading"><div><h2>AI handwriting reader</h2><p class="muted">Optional connection configured by the app administrator.</p></div></div>
+<div class="provider-status"><span class="status-indicator {{ 'is-online' if ai_ready else 'is-offline' }}"></span><div><strong>{{ 'AI provider connected' if ai_ready else 'AI provider not configured' }}</strong><small>{{ provider|capitalize }} · {{ 'Ready to process ledger photos' if ai_ready else 'Manual ledger features still work normally' }}</small></div></div>
+<div class="inline-note">AI API keys are configured on the server and are never stored in this page or exposed to the browser. To enable scanning, the administrator must add the chosen provider's key and model to the server environment.</div>
+<div class="divider"></div>
+<h3>Privacy checklist</h3>
+<ul class="check-list"><li>Access code is saved as a one-way hash.</li><li>Private pages require an active shopkeeper session.</li><li>Lock ends the active session.</li><li>AI entries need your review before saving.</li></ul>
+</section>
+</div>
+{% endblock %}
