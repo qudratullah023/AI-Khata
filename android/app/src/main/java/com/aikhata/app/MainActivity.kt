@@ -19,6 +19,7 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.*
+import com.google.android.material.snackbar.Snackbar
 import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -657,6 +658,23 @@ class MainActivity : ComponentActivity() {
         box.addView(top)
         box.addView(text(entry.date, 12, muted))
         if (entry.description.isNotBlank()) box.addView(text(entry.description, 14, ink))
+        var swipeStartX = 0f
+        box.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    swipeStartX = event.x
+                    false
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val swipeDistance = swipeStartX - event.x
+                    if (swipeDistance > dp(72)) {
+                        deleteTransactionWithUndo(customerId, entry)
+                        true
+                    } else false
+                }
+                else -> false
+            }
+        }
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
         }
@@ -780,33 +798,58 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Delete this entry?")
             .setMessage(
-                "This will permanently remove the " + money(entry.amount) +
-                    (if (entry.type == "credit") " credit / sale" else " payment") +
-                    " entry from this customer's khata."
+                "This removes the " + money(entry.amount) +
+                    (if (entry.type == "credit") " sale" else " payment") +
+                    " entry. You can undo it for a short time."
             )
             .setNegativeButton("Keep entry", null)
-            .setPositiveButton("Delete") { _, _ ->
-                db.deleteTransaction(entry.id)
-                toast("Entry deleted.")
-                showCustomer(customerId)
+            .setPositiveButton("Delete") { _, _ -> deleteTransactionWithUndo(customerId, entry) }
+            .show()
+    }
+
+    private fun deleteTransactionWithUndo(customerId: Long, entry: TransactionRow) {
+        if (db.deleteTransaction(entry.id) == 0) return
+        showCustomer(customerId)
+        Snackbar.make(root, "Entry deleted", Snackbar.LENGTH_LONG)
+            .setAction("UNDO") {
+                try {
+                    db.addTransaction(customerId, entry.type, entry.amount, entry.description, entry.date)
+                    showCustomer(customerId)
+                    toast("Entry restored.")
+                } catch (error: Exception) {
+                    toast("The entry could not be restored.")
+                }
             }
             .show()
     }
 
     private fun confirmDeleteCustomer(customerId: Long) {
         val customer = db.customer(customerId) ?: return showCustomers()
-        val count = db.transactions(customerId).size
+        val savedEntries = db.transactions(customerId)
         AlertDialog.Builder(this)
             .setTitle("Delete " + customer.name + "'s khata?")
             .setMessage(
-                "This permanently deletes this customer and all " + count +
-                    " transaction entries in their khata. This cannot be undone."
+                "This removes this customer and all " + savedEntries.size +
+                    " entries. You can undo it for a short time."
             )
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Delete khata") { _, _ ->
                 db.deleteCustomer(customerId)
-                toast("Customer khata deleted.")
                 showCustomers()
+                Snackbar.make(root, "Customer khata deleted", Snackbar.LENGTH_LONG)
+                    .setAction("UNDO") {
+                        try {
+                            val restoredId = db.addCustomer(customer.name, customer.phone)
+                            savedEntries.forEach { entry ->
+                                db.addTransaction(restoredId, entry.type, entry.amount, entry.description, entry.date)
+                            }
+                            showCustomer(restoredId)
+                            toast("Customer khata restored.")
+                        } catch (error: Exception) {
+                            toast("The customer account could not be restored.")
+                        }
+                    }
+                    .show()
             }
             .show()
     }
