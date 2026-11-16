@@ -3,6 +3,7 @@ package com.aikhata.app.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -32,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberInfiniteTransition
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +49,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
 
 @Composable
 fun FuturisticBackdrop(
@@ -155,6 +160,16 @@ fun GlowPill(
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary
 ) {
+    val pulse = rememberInfiniteTransition(label = "glow-pill-pulse")
+    val dotAlpha by pulse.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1050, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow-dot-alpha"
+    )
     Row(
         modifier = modifier
             .clip(CircleShape)
@@ -167,6 +182,7 @@ fun GlowPill(
         Box(
             Modifier
                 .size(6.dp)
+                .alpha(dotAlpha)
                 .background(accent, CircleShape)
         )
         Text(label, color = accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -184,7 +200,7 @@ fun AnimatedValue(
         targetState = value,
         modifier = modifier,
         transitionSpec = {
-            fadeIn(tween(220)) togetherWith fadeIn(tween(220))
+            fadeIn(tween(220)) togetherWith fadeOut(tween(160))
         },
         label = "animated-value"
     ) { target ->
