@@ -476,7 +476,7 @@ def extract_with_gemini(image_bytes, mime_type):
     models = [
         part.strip() for part in os.environ.get(
             "GEMINI_MODELS",
-            "gemini-3.8-flash,gemini-3.7-flash,gemini-2.5-flash"
+            "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-2.5-flash"
         ).split(",") if part.strip()
     ]
     schema = {
