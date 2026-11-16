@@ -31,7 +31,7 @@ Export a backup before uninstalling the app, clearing its storage or changing ph
 
 ## Android app
 
-The native Android project is in `android/`. It supports Android 6.0 and newer, including Android 10. The primary dashboard, customer list, customer khata/transaction history, reports and shop settings use Jetpack Compose. No server, website URL or hosting account is needed for ordinary ledger use.
+The native Android project is in `android/`. It supports Android 6.0 and newer, including Android 10. The primary dashboard, customer list, customer khata/transaction history, reports and shop settings use Jetpack Compose. The latest interface refresh adds subtle entrance motion, animated status indicators and totals, gradient metric panels, responsive progress visuals and smoother screen transitions. No server, website URL or hosting account is needed for ordinary ledger use.
 
 To build the APK, open GitHub → Actions → **AI Khata checks and Android APK**. The workflow runs the Python regression tests and builds the Android debug APK. The APK is uploaded as the `ai-khata-debug-apk` artifact.
 
