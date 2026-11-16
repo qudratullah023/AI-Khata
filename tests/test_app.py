@@ -242,18 +242,22 @@ class AIKhataTests(unittest.TestCase):
             "INSERT INTO transactions(id, customer_id, transaction_date, transaction_type, description, amount, created_at) VALUES (19, 7, '2026-11-16', 'credit', 'Rice', 1234.50, '2026-11-16T10:00:00')"
         )
         db.execute(
+            "INSERT INTO transactions(id, customer_id, transaction_date, transaction_type, description, amount, created_at) VALUES (20, 7, '2026-11-16', 'credit', 'Small amount', 0.001, '2026-11-16T10:01:00')"
+        )
+        db.execute(
             "CREATE TABLE transactions_new (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL, description TEXT NOT NULL, amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)"
         )
         db.execute(
-            "INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, MAX(1, CAST(ROUND(amount * 100) AS INTEGER)), created_at FROM transactions WHERE amount > 0"
+            "INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, MAX(1, CAST(ROUND(amount * 100.0 + 0.000001) AS INTEGER)), created_at FROM transactions WHERE amount > 0"
         )
         db.execute("DROP TABLE transactions")
         db.execute("ALTER TABLE transactions_new RENAME TO transactions")
         db.execute("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
-        row = db.execute(
-            "SELECT id, customer_id, amount_paisa, description FROM transactions"
-        ).fetchone()
-        self.assertEqual(row, (19, 7, 123450, "Rice"))
+        rows = db.execute(
+            "SELECT id, customer_id, amount_paisa, description FROM transactions ORDER BY id"
+        ).fetchall()
+        self.assertEqual(rows[0], (19, 7, 123450, "Rice"))
+        self.assertEqual(rows[1], (20, 7, 1, "Small amount"))
         self.assertEqual(db.execute("SELECT name FROM customers WHERE id=7").fetchone()[0], "Amina")
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         db.close()
