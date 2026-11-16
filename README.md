@@ -14,6 +14,7 @@ A simple digital khata for shopkeepers. Keep customer accounts, credit sales and
 - View all-time totals and month-by-month reports.
 - Share a customer's account statement.
 - Export a backup and restore it when needed.
+- Review shareable all-time and monthly reports, including customers with the highest outstanding balances.
 - Optionally read a photo of a handwritten ledger with AI. Add multiple Gemini keys; the app automatically retries alternate keys and supported Flash models. Check suggested entries before saving them.
 
 ## Offline use and AI photo reading
@@ -30,7 +31,7 @@ Export a backup before uninstalling the app, clearing its storage or changing ph
 
 ## Android app
 
-The native Android project is in `android/`. It supports Android 6.0 and newer, including Android 10. No server, website URL or hosting account is needed.
+The native Android project is in `android/`. It supports Android 6.0 and newer, including Android 10. The primary dashboard, customer list, customer khata/transaction history, reports and shop settings use Jetpack Compose. No server, website URL or hosting account is needed for ordinary ledger use.
 
 To build the APK, open GitHub → Actions → **AI Khata checks and Android APK**. The workflow runs the Python regression tests and builds the Android debug APK. The APK is uploaded as the `ai-khata-debug-apk` artifact.
 

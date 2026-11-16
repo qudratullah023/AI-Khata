@@ -45,6 +45,16 @@ import com.aikhata.app.ui.customers.CustomersViewModelFactory
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavHostController
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.collect
+import com.aikhata.app.ui.customer.CustomerDetailScreen
+import com.aikhata.app.ui.customer.CustomerDetailViewModel
+import com.aikhata.app.ui.customer.CustomerDetailViewModelFactory
+import com.aikhata.app.ui.reports.ReportsScreen
+import com.aikhata.app.ui.reports.ReportsViewModel
+import com.aikhata.app.ui.reports.ReportsViewModelFactory
+import com.aikhata.app.ui.settings.SettingsScreen
 import com.aikhata.app.ui.theme.AiKhataTheme
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
@@ -91,6 +101,15 @@ class MainActivity : FragmentActivity() {
     private var pendingBackupContent: ByteArray? = null
     private var biometricPromptShowing = false
     private var initialComposeRoute = "home"
+    private var composeNavController: NavHostController? = null
+    private val customerDetailViewModel by lazy {
+        ViewModelProvider(this, CustomerDetailViewModelFactory(KhataRepository(db)))
+            .get(CustomerDetailViewModel::class.java)
+    }
+    private val reportsViewModel by lazy {
+        ViewModelProvider(this, ReportsViewModelFactory(KhataRepository(db)))
+            .get(ReportsViewModel::class.java)
+    }
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -143,6 +162,17 @@ class MainActivity : FragmentActivity() {
         pendingCameraUri = savedInstanceState?.getString("pending_camera_uri")?.let { Uri.parse(it) }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                val controller = composeNavController
+                if (unlocked && controller != null && currentScreen != "home") {
+                    if (!controller.popBackStack()) {
+                        controller.navigate("home") {
+                            popUpTo(controller.graph.startDestinationId) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                    return
+                }
+                if (controller?.popBackStack() == true) return
                 val action = backAction
                 if (action != null) {
                     backAction = null
@@ -454,6 +484,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showSetup() {
+        composeNavController = null
         unlocked = false
         page("Welcome to AI Khata", "A simple, private khata for your shop.")
         val shop = input("Shop name")
@@ -479,6 +510,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showUnlock() {
+        composeNavController = null
         unlocked = false
         page(db.shopName(), "Enter your PIN to continue.")
         val pin = input("Shop PIN", true)
@@ -578,7 +610,6 @@ class MainActivity : FragmentActivity() {
 
     private fun showHome() {
         if (!guard()) return
-        currentScreen = "home"
         backAction = null
         homeViewModel.refresh()
         customersViewModel.refresh()
@@ -586,8 +617,22 @@ class MainActivity : FragmentActivity() {
         val startRoute = initialComposeRoute
         initialComposeRoute = "home"
         setContent {
+            val navController = rememberNavController()
+            LaunchedEffect(navController) {
+                composeNavController = navController
+                navController.currentBackStackEntryFlow.collect { entry ->
+                    val route = entry.destination.route.orEmpty()
+                    currentScreen = when {
+                        route == "home" -> "home"
+                        route == "customers" -> "customers"
+                        route.startsWith("customer/") -> "customer"
+                        route.startsWith("reports/") -> "reports"
+                        route == "settings" -> "settings"
+                        else -> "home"
+                    }
+                }
+            }
             AiKhataTheme {
-                val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = startRoute) {
                     composable("home") {
                         val state by homeViewModel.state.collectAsStateWithLifecycle()
@@ -595,26 +640,113 @@ class MainActivity : FragmentActivity() {
                             state = state,
                             onCustomers = { navController.navigate("customers") },
                             onAddCustomer = { addCustomerDialog() },
-                            onReports = { showReports() },
+                            onReports = { navController.navigate("reports/" + today().take(7)) },
                             onScan = { chooseImage() },
-                            onSettings = { showSettings() },
+                            onSettings = { navController.navigate("settings") },
                             onLock = {
+                                composeNavController = null
                                 unlocked = false
                                 showUnlock()
                             },
                             onBackup = { exportBackup() },
                             onRetryScans = { processNextQueuedPhoto() },
                             waitingPhotoCount = waitingPhotos,
-                            onCustomerClick = { showCustomer(it) },
+                            onCustomerClick = { navController.navigate("customer/" + it) },
                             onRefresh = { homeViewModel.refresh() }
                         )
                     }
                     composable("customers") {
                         CustomersScreen(
                             viewModel = customersViewModel,
-                            onBack = { navController.popBackStack() },
+                            onBack = { if (!navController.popBackStack()) showHome() },
                             onAddCustomer = { addCustomerDialog() },
-                            onCustomerClick = { showCustomer(it) }
+                            onCustomerClick = { navController.navigate("customer/" + it) }
+                        )
+                    }
+                    composable("customer/{customerId}") { entry ->
+                        val customerId = entry.arguments?.getString("customerId")?.toLongOrNull() ?: -1L
+                        CustomerDetailScreen(
+                            customerId = customerId,
+                            viewModel = customerDetailViewModel,
+                            onBack = { if (!navController.popBackStack()) showCustomers() },
+                            onAddCredit = { addTransactionDialog(customerId, "credit") },
+                            onRecordPayment = { addTransactionDialog(customerId, "payment") },
+                            onEditCustomer = {
+                                customerDetailViewModel.state.value.detail?.customer?.let { editCustomerDialog(it) }
+                            },
+                            onMergeCustomer = {
+                                customerDetailViewModel.state.value.detail?.customer?.let { showMergeCustomerDialog(it) }
+                            },
+                            onShareStatement = { shareStatement(customerId) },
+                            onDeleteCustomer = { confirmDeleteCustomer(customerId) },
+                            onEditTransaction = { editTransactionDialog(customerId, it) },
+                            onDeleteTransaction = { confirmDeleteTransaction(customerId, it) }
+                        )
+                    }
+                    composable("reports/{month}") { entry ->
+                        val month = entry.arguments?.getString("month") ?: today().take(7)
+                        ReportsScreen(
+                            initialMonth = month,
+                            viewModel = reportsViewModel,
+                            onBack = { if (!navController.popBackStack()) showHome() },
+                            onShareReport = { shareMonthlyReport(it) }
+                        )
+                    }
+                    composable("settings") {
+                        SettingsScreen(
+                            shopName = db.shopName(),
+                            biometricEnabled = prefs.getBoolean("biometric_enabled", false),
+                            apiKeyCount = apiKeyCount(),
+                            appVersion = BuildConfig.VERSION_NAME,
+                            onBack = { if (!navController.popBackStack()) showHome() },
+                            onSaveShopName = { value ->
+                                if (value.isNotBlank()) {
+                                    db.updateShopName(value.take(80))
+                                    toast("Shop name updated.")
+                                    showSettings()
+                                } else toast("Enter a shop name.")
+                            },
+                            onChangePin = { pin, confirm ->
+                                if (pin.length >= 6 && pin.all { it.isDigit() } && pin == confirm) {
+                                    db.changePin(pin)
+                                    toast("Your PIN has been changed.")
+                                    showSettings()
+                                } else toast("Your PINs must match and contain at least 6 digits.")
+                            },
+                            onToggleBiometric = { enabled ->
+                                if (!enabled) {
+                                    prefs.edit().putBoolean("biometric_enabled", false).apply()
+                                    toast("Fingerprint unlock is turned off.")
+                                    showSettings()
+                                } else if (canUseBiometric()) {
+                                    prefs.edit().putBoolean("biometric_enabled", true).apply()
+                                    toast("Fingerprint unlock is ready.")
+                                    showSettings()
+                                } else {
+                                    toast("Set up a fingerprint in your phone settings first. Your shop PIN will continue to work.")
+                                }
+                            },
+                            onSaveApiKeys = { value ->
+                                val count = saveApiKeys(value)
+                                if (count > 0) {
+                                    toast(count.toString() + " AI key(s) saved securely. Automatic fallback is on.")
+                                    showSettings()
+                                } else toast("No valid key was found. Paste one key per line.")
+                            },
+                            onDeleteApiKeys = {
+                                AlertDialog.Builder(this@MainActivity)
+                                    .setTitle("Remove AI keys?")
+                                    .setMessage("Photo reading will be turned off until you add keys again.")
+                                    .setNegativeButton("Cancel", null)
+                                    .setPositiveButton("Remove") { _, _ ->
+                                        deleteApiKey()
+                                        toast("AI keys removed.")
+                                        showSettings()
+                                    }
+                                    .show()
+                            },
+                            onExportBackup = { exportBackup() },
+                            onImportBackup = { importBackup() }
                         )
                     }
                 }
@@ -686,33 +818,8 @@ class MainActivity : FragmentActivity() {
 
     private fun showCustomer(id: Long) {
         if (!guard()) return
-        val customer = db.customer(id)
-        if (customer == null) {
-            showCustomers()
-            return
-        }
-        val entries = db.transactions(id)
-        val credits = entries.filter { it.type == "credit" }.sumOf { it.amount }
-        val payments = entries.filter { it.type == "payment" }.sumOf { it.amount }
-        page(customer.name, customer.phone.ifBlank { "Customer khata" }, back = { showCustomers() })
-        card(
-            "Current amount due",
-            money(credits - payments),
-            "Credit " + money(credits) + "  ·  Payments " + money(payments)
-        )
-        button("+ Add credit / sale", { addTransactionDialog(id, "credit") }, true)
-        button("Record a payment", { addTransactionDialog(id, "payment") })
-        button("Edit customer details", { editCustomerDialog(customer) })
-        button("Merge duplicate customer account", { showMergeCustomerDialog(customer) })
-        button("Share account statement", { shareStatement(id) })
-        button("Delete this khata", { confirmDeleteCustomer(id) }, danger = true)
-        gap(14)
-        section("Transaction history", entries.size.toString() + " entries")
-        if (entries.isEmpty()) {
-            root.addView(text("No entries yet. Add a sale or record a payment.", 14, muted))
-        } else {
-            entries.forEach { transactionTile(id, it) }
-        }
+        initialComposeRoute = "customer/" + id
+        showHome()
     }
 
     private fun showMergeCustomerDialog(target: CustomerRow) {
@@ -922,7 +1029,7 @@ class MainActivity : FragmentActivity() {
     private fun deleteTransactionWithUndo(customerId: Long, entry: TransactionRow) {
         if (db.deleteTransaction(entry.id) == 0) return
         showCustomer(customerId)
-        Snackbar.make(root, "Entry deleted", Snackbar.LENGTH_LONG)
+        Snackbar.make(findViewById(android.R.id.content), "Entry deleted", Snackbar.LENGTH_LONG)
             .setAction("UNDO") {
                 try {
                     db.addTransaction(customerId, entry.type, entry.amount, entry.description, entry.date)
@@ -948,7 +1055,7 @@ class MainActivity : FragmentActivity() {
             .setPositiveButton("Delete khata") { _, _ ->
                 db.deleteCustomer(customerId)
                 showCustomers()
-                Snackbar.make(root, "Customer khata deleted", Snackbar.LENGTH_LONG)
+                Snackbar.make(findViewById(android.R.id.content), "Customer khata deleted", Snackbar.LENGTH_LONG)
                     .setAction("UNDO") {
                         try {
                             val restoredId = db.addCustomer(customer.name, customer.phone)
@@ -996,106 +1103,43 @@ class MainActivity : FragmentActivity() {
         startActivity(Intent.createChooser(send, "Share account statement"))
     }
 
-    private fun showReports(month: String = today().take(7)) {
-        if (!guard()) return
+    private fun shareMonthlyReport(month: String) {
         val totals = db.totals()
         val monthTotals = db.monthTotals(month)
-        page("Reports", "A clear view of your shop's activity.", back = { showHome() })
-        card("All-time credit / sales", money(totals.first))
-        card("All-time payments received", money(totals.second))
-        card("Total amount due", money(totals.first - totals.second))
-        var selectedMonth = month
-        root.addView(text("Choose a month", 13, muted, true))
-        root.addView(monthPickerButton(selectedMonth) { selectedMonth = it })
-        button("View month", { showReports(selectedMonth) }, true)
-        gap(8)
-        section("Activity for $month")
-        card("Credit / sales", money(monthTotals.first))
-        card("Payments received", money(monthTotals.second))
+        val dueCount = db.customers().count { it.balance > 0.009 }
+        val reportText = buildString {
+            append(db.shopName()).append("\n")
+            append("AI Khata report · ").append(month).append("\n")
+            append("------------------------------\n")
+            append("All-time sales: ").append(money(totals.first)).append("\n")
+            append("All-time payments: ").append(money(totals.second)).append("\n")
+            append("Outstanding balance: ").append(money(totals.first - totals.second)).append("\n")
+            append("All-time entries: ").append(totals.third).append("\n")
+            append("------------------------------\n")
+            append("Monthly sales: ").append(money(monthTotals.first)).append("\n")
+            append("Monthly payments: ").append(money(monthTotals.second)).append("\n")
+            append("Monthly entries: ").append(db.monthTransactionCount(month)).append("\n")
+            append("Customers with amount due: ").append(dueCount)
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "AI Khata report - " + month)
+            putExtra(Intent.EXTRA_TEXT, reportText)
+        }
+        startActivity(Intent.createChooser(send, "Share shop report"))
+    }
+
+    private fun showReports(month: String = today().take(7)) {
+        if (!guard()) return
+        val validMonth = if (Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(month)) month else today().take(7)
+        initialComposeRoute = "reports/" + validMonth
+        showHome()
     }
 
     private fun showSettings() {
         if (!guard()) return
-        page("Settings", "Manage your shop details and preferences.", back = { showHome() })
-        val shop = input("Shop name").apply { setText(db.shopName()) }
-        root.addView(text("Shop name", 13, muted, true))
-        root.addView(shop)
-        button("Save shop name", {
-            if (shop.text.isNotBlank()) {
-                db.updateShopName(shop.text.toString())
-                toast("Shop name updated.")
-                showSettings()
-            } else toast("Enter a shop name.")
-        }, true)
-
-        gap(10)
-        section("Change your PIN")
-        val pin = input("New 6-digit PIN", true)
-        val confirm = input("Confirm new PIN", true)
-        root.addView(pin)
-        root.addView(confirm, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        button("Update PIN", {
-            if (pin.text.length < 6 || pin.text.toString() != confirm.text.toString()) {
-                toast("Your PINs must match and contain at least 6 digits.")
-            } else {
-                db.changePin(pin.text.toString())
-                toast("Your PIN has been changed.")
-                showSettings()
-            }
-        })
-
-        gap(12)
-        section("Fingerprint unlock", "Use your phone's registered fingerprint as an optional shortcut to your shop PIN.")
-        if (prefs.getBoolean("biometric_enabled", false)) {
-            button("Turn off fingerprint unlock", {
-                prefs.edit().putBoolean("biometric_enabled", false).apply()
-                toast("Fingerprint unlock is turned off.")
-                showSettings()
-            })
-        } else {
-            button("Enable fingerprint unlock", {
-                if (canUseBiometric()) {
-                    prefs.edit().putBoolean("biometric_enabled", true).apply()
-                    toast("Fingerprint unlock is ready.")
-                    showSettings()
-                } else {
-                    toast("Set up a fingerprint in your phone settings first. Your shop PIN will continue to work.")
-                }
-            })
-        }
-
-        gap(12)
-        section("AI photo reading", "AI Khata tries its built-in service first. No key is needed for normal use. Personal Gemini keys are optional advanced backups.")
-        val api = input("Optional personal Gemini key(s), one per line").apply {
-            setSingleLine(false); minLines = 2; maxLines = 4
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            gravity = Gravity.TOP
-        }
-        api.setText(if (hasApiKey()) "Saved securely · " + apiKeyCount() + " key(s).\\nPaste new keys here to replace them." else "")
-        root.addView(api)
-        button("Save AI keys", {
-            val value = api.text.toString().trim()
-            if (value.isNotBlank() && !value.startsWith("Saved securely")) {
-                val count = saveApiKeys(value)
-                if (count > 0) { toast("$count AI key(s) saved securely. Automatic fallback is on."); showSettings() }
-                else toast("No valid key was found. Paste one key per line.")
-            } else toast("Paste one or more API keys first.")
-        }, true)
-        if (hasApiKey()) {
-            button("Remove all AI keys", {
-                AlertDialog.Builder(this).setTitle("Remove AI keys?")
-                    .setMessage("Photo reading will be turned off until you add keys again.")
-                    .setNegativeButton("Cancel", null)
-                    .setPositiveButton("Remove") { _, _ -> deleteApiKey(); toast("AI keys removed."); showSettings() }.show()
-            }, danger = true)
-        }
-
-        gap(12)
-        section("Backup and restore", "Keep a copy of your shop records in a safe place.")
-        button("Export a backup", { exportBackup() })
-        button("Restore a backup", { importBackup() })
-        gap(10)
-        root.addView(text("AI Khata · Version 2.4.0", 12, muted))
+        initialComposeRoute = "settings"
+        showHome()
     }
 
     private fun validDate(value: String): Boolean = LedgerMath.isValidDate(value)
