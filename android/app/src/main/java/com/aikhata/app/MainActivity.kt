@@ -1106,17 +1106,17 @@ class MainActivity : FragmentActivity() {
         val monthTotals = db.monthTotals(month)
         val dueCount = db.customers().count { it.balance > 0.009 }
         val reportText = buildString {
-            append(db.shopName()).append("\\n")
-            append("AI Khata report · ").append(month).append("\\n")
-            append("------------------------------\\n")
-            append("All-time sales: ").append(money(totals.first)).append("\\n")
-            append("All-time payments: ").append(money(totals.second)).append("\\n")
-            append("Outstanding balance: ").append(money(totals.first - totals.second)).append("\\n")
-            append("All-time entries: ").append(totals.third).append("\\n")
-            append("------------------------------\\n")
-            append("Monthly sales: ").append(money(monthTotals.first)).append("\\n")
-            append("Monthly payments: ").append(money(monthTotals.second)).append("\\n")
-            append("Monthly entries: ").append(db.monthTransactionCount(month)).append("\\n")
+            append(db.shopName()).append("\n")
+            append("AI Khata report · ").append(month).append("\n")
+            append("------------------------------\n")
+            append("All-time sales: ").append(money(totals.first)).append("\n")
+            append("All-time payments: ").append(money(totals.second)).append("\n")
+            append("Outstanding balance: ").append(money(totals.first - totals.second)).append("\n")
+            append("All-time entries: ").append(totals.third).append("\n")
+            append("------------------------------\n")
+            append("Monthly sales: ").append(money(monthTotals.first)).append("\n")
+            append("Monthly payments: ").append(money(monthTotals.second)).append("\n")
+            append("Monthly entries: ").append(db.monthTransactionCount(month)).append("\n")
             append("Customers with amount due: ").append(dueCount)
         }
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -1129,7 +1129,7 @@ class MainActivity : FragmentActivity() {
 
     private fun showReports(month: String = today().take(7)) {
         if (!guard()) return
-        val validMonth = if (Regex("^\\\\d{4}-(0[1-9]|1[0-2])$").matches(month)) month else today().take(7)
+        val validMonth = if (Regex("^\\d{4}-(0[1-9]|1[0-2])$").matches(month)) month else today().take(7)
         initialComposeRoute = "reports/" + validMonth
         showHome()
     }
