@@ -6,6 +6,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 _TEST_HOME = tempfile.TemporaryDirectory(prefix="ai-khata-tests-")
@@ -169,6 +170,36 @@ class AIKhataTests(unittest.TestCase):
         changed = self.db_rows("SELECT password_hash FROM owner WHERE id=1")[0]
         self.assertTrue(khata.check_password_hash(changed["password_hash"], "654321"))
         self.assertFalse(khata.check_password_hash(changed["password_hash"], "123456"))
+
+    def test_mobile_ai_endpoint_uses_server_key_and_rate_limits_install(self):
+        khata._mobile_requests.clear()
+        previous_limit = khata.MOBILE_RATE_LIMIT_PER_HOUR
+        khata.MOBILE_RATE_LIMIT_PER_HOUR = 1
+        image = bytes([255, 216, 255]) + b"test-image-payload"
+        raw = '{"entries":[{"customer_name":"Amina","date":"2026-11-16","description":"Rice","amount":450,"type":"credit"}]}'
+        try:
+            with patch.object(khata, "ai_is_ready", return_value=True), patch.object(
+                khata, "extract_with_gemini", return_value=raw
+            ):
+                first = self.client.post(
+                    "/api/mobile/extract",
+                    data={"ledger_image": (io.BytesIO(image), "page.jpg", "image/jpeg")},
+                    headers={"X-Install-ID": "test-install-identifier-001"},
+                    content_type="multipart/form-data",
+                )
+                self.assertEqual(first.status_code, 200)
+                self.assertTrue(first.get_json()["review_required"])
+                self.assertEqual(first.get_json()["entries"][0]["customer_name"], "Amina")
+                second = self.client.post(
+                    "/api/mobile/extract",
+                    data={"ledger_image": (io.BytesIO(image), "page.jpg", "image/jpeg")},
+                    headers={"X-Install-ID": "test-install-identifier-001"},
+                    content_type="multipart/form-data",
+                )
+                self.assertEqual(second.status_code, 429)
+        finally:
+            khata.MOBILE_RATE_LIMIT_PER_HOUR = previous_limit
+            khata._mobile_requests.clear()
 
     def test_uploaded_file_must_really_be_an_image(self):
         self.create_owner()
