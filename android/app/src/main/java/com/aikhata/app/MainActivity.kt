@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private var sortCustomersByBalance = false
     private var showOnlyDueCustomers = false
     private var backgroundedAt = 0L
+    private var pendingBackupContent: ByteArray? = null
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -76,7 +77,7 @@ class MainActivity : ComponentActivity() {
             pendingCameraUri = null
             if (success && uri != null) runAiExtraction(uri)
         }
-        backupCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        backupCreator = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             uri?.let { writeBackupFile(it) }
         }
         backupPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -928,7 +929,39 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun exportBackup() {
-        backupCreator.launch("my-shop-khata-backup.json")
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val password = input("Create backup password", true)
+        val confirm = input("Confirm backup password", true)
+        box.addView(password)
+        box.addView(confirm, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Protect your backup")
+            .setMessage("Your customer names, phone numbers and account history will be encrypted. Keep this password safe; it cannot be recovered.")
+            .setView(box)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create backup", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(-1).setOnClickListener {
+                val first = password.text.toString()
+                if (first.length < 8 || first != confirm.text.toString()) {
+                    toast("Use matching passwords with at least 8 characters.")
+                } else {
+                    try {
+                        pendingBackupContent = BackupCrypto.encrypt(db.exportBackup(), first)
+                            .toByteArray(Charsets.UTF_8)
+                        dialog.dismiss()
+                        backupCreator.launch("ai-khata-backup.aikhata")
+                    } catch (error: Exception) {
+                        toast("The backup could not be prepared: " + error.message)
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun importBackup() {
@@ -937,40 +970,69 @@ class MainActivity : ComponentActivity() {
 
     private fun writeBackupFile(uri: Uri) {
         try {
-            contentResolver.openOutputStream(uri)?.use {
-                it.write(db.exportBackup().toByteArray(Charsets.UTF_8))
-            }
-            toast("Backup exported. Keep it somewhere safe.")
+            val contents = pendingBackupContent ?: throw IllegalStateException("The backup was not prepared.")
+            contentResolver.openOutputStream(uri)?.use { it.write(contents) }
+                ?: throw IllegalStateException("The backup file could not be created.")
+            pendingBackupContent = null
+            prefs.edit().putLong("last_backup_at", System.currentTimeMillis()).apply()
+            toast("Your password-protected backup is ready.")
         } catch (error: Exception) {
-            toast("Backup export failed.")
+            pendingBackupContent = null
+            toast("Backup export failed: " + (error.message ?: "Please try again."))
         }
     }
 
     private fun readBackupFile(uri: Uri) {
         try {
-            val json = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            val fileText = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 ?: throw IllegalArgumentException("The backup file could not be opened.")
-            val parsed = JSONObject(json)
-            if (parsed.optString("format") != "ai-khata-backup") {
+            val parsed = JSONObject(fileText)
+            if (parsed.optString("format") == "ai-khata-encrypted-backup") {
+                val password = input("Backup password", true)
+                AlertDialog.Builder(this)
+                    .setTitle("Unlock backup")
+                    .setMessage("Enter the password used when this backup was created.")
+                    .setView(password)
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Continue") { _, _ ->
+                        try {
+                            val json = BackupCrypto.decrypt(fileText, password.text.toString())
+                            confirmRestoreBackup(json)
+                        } catch (error: Exception) {
+                            toast(error.message ?: "Could not unlock this backup.")
+                        }
+                    }
+                    .show()
+            } else if (parsed.optString("format") == "ai-khata-backup") {
+                AlertDialog.Builder(this)
+                    .setTitle("Older unencrypted backup")
+                    .setMessage("This older backup is not password-protected. Restore it only if you trust this file.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Continue") { _, _ -> confirmRestoreBackup(fileText) }
+                    .show()
+            } else {
                 throw IllegalArgumentException("This is not an AI Khata backup.")
             }
-            AlertDialog.Builder(this)
-                .setTitle("Restore this backup?")
-                .setMessage("Restoring will replace the customer accounts and entries currently in this app. Export a backup of your current records first if you need them.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Restore") { _, _ ->
-                    try {
-                        db.restoreBackup(json)
-                        toast("Your backup has been restored.")
-                        showHome()
-                    } catch (error: Exception) {
-                        toast("Backup could not be restored: " + error.message)
-                    }
-                }
-                .show()
         } catch (error: Exception) {
             toast("Could not read this backup file: " + (error.message ?: "Please check the file."))
         }
+    }
+
+    private fun confirmRestoreBackup(json: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Restore this backup?")
+            .setMessage("Restoring will replace the customer accounts and entries currently in this app. Export a backup of your current records first if you need them.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Restore") { _, _ ->
+                try {
+                    db.restoreBackup(json)
+                    toast("Your backup has been restored.")
+                    showHome()
+                } catch (error: Exception) {
+                    toast("Backup could not be restored: " + error.message)
+                }
+            }
+            .show()
     }
 
     private fun hasNetworkConnection(): Boolean {
