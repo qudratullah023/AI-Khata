@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private var currentScreen = "start"
     private var lastHomeBack = 0L
     private var sortCustomersByBalance = false
+    private var showOnlyDueCustomers = false
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -309,6 +310,7 @@ class MainActivity : Activity() {
         val month = db.monthTotals(today().take(7))
         val customers = db.customers()
         page(db.shopName(), "Your shop at a glance.")
+        currentScreen = "home"
         card(
             "Total amount customers owe",
             money(totals.first - totals.second),
@@ -377,10 +379,18 @@ class MainActivity : Activity() {
                 showCustomers(search.text.toString())
             }
         )
-        val customers = db.customers(query).let {
+        button(
+            if (showOnlyDueCustomers) "Show all customer accounts" else "Show only accounts with money due",
+            {
+                showOnlyDueCustomers = !showOnlyDueCustomers
+                showCustomers(search.text.toString())
+            }
+        )
+        val sortedCustomers = db.customers(query).let {
             if (sortCustomersByBalance) it.sortedByDescending { customer -> customer.balance }
             else it
         }
+        val customers = if (showOnlyDueCustomers) sortedCustomers.filter { it.balance > 0.009 } else sortedCustomers
         gap(6)
         if (customers.isEmpty()) {
             root.addView(text("No customers found. Add a customer to start a new khata.", 14, muted))
