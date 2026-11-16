@@ -71,6 +71,22 @@ class MainActivity : Activity() {
         if (db.isSetUp()) showUnlock() else showSetup()
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (unlocked && backgroundedAt > 0L &&
+            SystemClock.elapsedRealtime() - backgroundedAt >= 120_000L
+        ) {
+            unlocked = false
+            backgroundedAt = 0L
+            showUnlock()
+        }
+    }
+
+    override fun onStop() {
+        if (unlocked) backgroundedAt = SystemClock.elapsedRealtime()
+        super.onStop()
+    }
+
     @Deprecated("Back navigation is handled inside the app")
     override fun onBackPressed() {
         val action = backAction
@@ -378,11 +394,29 @@ class MainActivity : Activity() {
         val pin = input("Shop PIN", true)
         root.addView(pin)
         button("Unlock", {
+            val now = System.currentTimeMillis()
+            val lockedUntil = prefs.getLong("pin_locked_until", 0L)
+            if (now < lockedUntil) {
+                val seconds = ((lockedUntil - now + 999) / 1000).coerceAtLeast(1)
+                toast("Too many attempts. Please wait $seconds seconds.")
+                return@button
+            }
             if (db.verifyPin(pin.text.toString())) {
+                prefs.edit().remove("pin_failures").remove("pin_locked_until").apply()
                 unlocked = true
                 showHome()
             } else {
-                toast("That PIN is not correct. Please try again.")
+                val failures = prefs.getInt("pin_failures", 0) + 1
+                if (failures >= 5) {
+                    val stage = (prefs.getInt("pin_lock_stage", 0) + 1).coerceAtMost(6)
+                    val waitSeconds = (30L * (1L shl (stage - 1))).coerceAtMost(900L)
+                    prefs.edit().putInt("pin_lock_stage", stage).putInt("pin_failures", 0)
+                        .putLong("pin_locked_until", now + waitSeconds * 1000L).apply()
+                    toast("Too many wrong PINs. Try again in $waitSeconds seconds.")
+                } else {
+                    prefs.edit().putInt("pin_failures", failures).apply()
+                    toast("That PIN is not correct. $failures of 5 attempts used.")
+                }
                 pin.text.clear()
             }
         }, true)
