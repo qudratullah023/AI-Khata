@@ -4,8 +4,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import java.math.BigDecimal
-import java.math.RoundingMode
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -281,16 +279,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         }
     }
 
-    private fun toPaisa(amount: Double): Long {
-        require(amount > 0 && amount.isFinite() && amount <= 9_000_000_000_000.0)
-        return BigDecimal.valueOf(amount)
-            .movePointRight(2)
-            .setScale(0, RoundingMode.HALF_UP)
-            .longValueExact()
-            .also {
-                require(it > 0) { "The amount is too small." }
-            }
-    }
+    private fun toPaisa(amount: Double): Long = LedgerMath.toPaisa(amount)
 
     private fun derive(pin: String, salt: ByteArray) =
         SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
