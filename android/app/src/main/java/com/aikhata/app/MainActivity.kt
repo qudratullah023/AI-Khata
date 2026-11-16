@@ -777,16 +777,18 @@ class MainActivity : FragmentActivity() {
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     swipeStartX = event.x
-                    false
+                    true
                 }
+                android.view.MotionEvent.ACTION_MOVE -> true
                 android.view.MotionEvent.ACTION_UP -> {
                     val swipeDistance = swipeStartX - event.x
                     if (swipeDistance > dp(72)) {
                         deleteTransactionWithUndo(customerId, entry)
-                        true
-                    } else false
+                    }
+                    true
                 }
-                else -> false
+                android.view.MotionEvent.ACTION_CANCEL -> true
+                else -> true
             }
         }
         val actions = LinearLayout(this).apply {
