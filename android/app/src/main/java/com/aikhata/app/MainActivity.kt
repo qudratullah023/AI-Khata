@@ -126,8 +126,25 @@ class MainActivity : FragmentActivity() {
         window.navigationBarColor = paper
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        if (db.isSetUp()) showUnlock() else showSetup()
+        if (db.isSetUp()) {
+            if (lastCustomNonConfigurationInstance == true) {
+                // Keep the current session through a screen rotation, but not through process death.
+                unlocked = true
+                when (savedInstanceState?.getString("current_screen")) {
+                    "customers" -> showCustomers()
+                    "reports" -> showReports()
+                    "settings" -> showSettings()
+                    else -> showHome()
+                }
+            } else {
+                showUnlock()
+            }
+        } else {
+            showSetup()
+        }
     }
+
+    override fun onRetainCustomNonConfigurationInstance(): Any? = unlocked
 
     override fun onStart() {
         super.onStart()
@@ -147,7 +164,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         pendingCameraUri?.let { outState.putString("pending_camera_uri", it.toString()) }
-        outState.putBoolean("was_unlocked", unlocked)
+        outState.putString("current_screen", currentScreen)
         super.onSaveInstanceState(outState)
     }
 
