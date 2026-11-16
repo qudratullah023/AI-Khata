@@ -21,6 +21,9 @@ import android.view.View
 import android.widget.*
 import com.google.android.material.snackbar.Snackbar
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
@@ -64,6 +67,7 @@ class MainActivity : ComponentActivity() {
     private var showOnlyDueCustomers = false
     private var backgroundedAt = 0L
     private var pendingBackupContent: ByteArray? = null
+    private var biometricPromptShowing = false
 
     private val green = Color.rgb(18, 107, 86)
     private val deepGreen = Color.rgb(19, 53, 44)
@@ -450,6 +454,62 @@ class MainActivity : ComponentActivity() {
                 pin.text.clear()
             }
         }, true)
+        if (prefs.getBoolean("biometric_enabled", false)) {
+            root.post { startBiometricUnlock() }
+        }
+    }
+
+    private fun canUseBiometric(): Boolean {
+        val manager = BiometricManager.from(this)
+        val result = if (android.os.Build.VERSION.SDK_INT >= 29) {
+            manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        } else {
+            manager.canAuthenticate()
+        }
+        return result == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    private fun startBiometricUnlock() {
+        if (biometricPromptShowing || !prefs.getBoolean("biometric_enabled", false)) return
+        if (!canUseBiometric()) {
+            toast("Fingerprint unlock is unavailable. Use your shop PIN.")
+            return
+        }
+        biometricPromptShowing = true
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    biometricPromptShowing = false
+                    prefs.edit().remove("pin_failures").remove("pin_locked_until").apply()
+                    unlocked = true
+                    showHome()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    biometricPromptShowing = false
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                        errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                    ) {
+                        toast("Fingerprint unlock failed. You can enter your shop PIN.")
+                    }
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    toast("Fingerprint not recognized. Try again or use your PIN.")
+                }
+            }
+        )
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock AI Khata")
+            .setSubtitle("Use your registered fingerprint")
+            .setNegativeButtonText("Use PIN")
+            .build()
+        prompt.authenticate(promptInfo)
     }
 
     private fun guard(): Boolean {
@@ -954,6 +1014,26 @@ class MainActivity : ComponentActivity() {
                 showSettings()
             }
         })
+
+        gap(12)
+        section("Fingerprint unlock", "Use your phone's registered fingerprint as an optional shortcut to your shop PIN.")
+        if (prefs.getBoolean("biometric_enabled", false)) {
+            button("Turn off fingerprint unlock", {
+                prefs.edit().putBoolean("biometric_enabled", false).apply()
+                toast("Fingerprint unlock is turned off.")
+                showSettings()
+            })
+        } else {
+            button("Enable fingerprint unlock", {
+                if (canUseBiometric()) {
+                    prefs.edit().putBoolean("biometric_enabled", true).apply()
+                    toast("Fingerprint unlock is ready.")
+                    showSettings()
+                } else {
+                    toast("Set up a fingerprint in your phone settings first. Your shop PIN will continue to work.")
+                }
+            })
+        }
 
         gap(12)
         section("AI photo reading", "AI Khata tries its built-in service first. No key is needed for normal use. Personal Gemini keys are optional advanced backups.")
