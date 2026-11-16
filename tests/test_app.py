@@ -245,6 +245,9 @@ class AIKhataTests(unittest.TestCase):
             "INSERT INTO transactions(id, customer_id, transaction_date, transaction_type, description, amount, created_at) VALUES (20, 7, '2026-11-16', 'credit', 'Small amount', 0.001, '2026-11-16T10:01:00')"
         )
         db.execute(
+            "INSERT INTO transactions(id, customer_id, transaction_date, transaction_type, description, amount, created_at) VALUES (21, 7, '2026-11-16', 'credit', 'Half-up amount', 1.005, '2026-11-16T10:02:00')"
+        )
+        db.execute(
             "CREATE TABLE transactions_new (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL, description TEXT NOT NULL, amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)"
         )
         db.execute(
@@ -258,6 +261,7 @@ class AIKhataTests(unittest.TestCase):
         ).fetchall()
         self.assertEqual(rows[0], (19, 7, 123450, "Rice"))
         self.assertEqual(rows[1], (20, 7, 1, "Small amount"))
+        self.assertEqual(rows[2], (21, 7, 101, "Half-up amount"))
         self.assertEqual(db.execute("SELECT name FROM customers WHERE id=7").fetchone()[0], "Amina")
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         db.close()
