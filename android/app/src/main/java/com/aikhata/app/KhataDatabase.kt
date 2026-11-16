@@ -35,6 +35,18 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         }
     }
 
+    fun <T> inTransaction(operation: () -> T): T {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val result = operation()
+            db.setTransactionSuccessful()
+            return result
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun isSetUp() = readableDatabase.rawQuery("SELECT 1 FROM owner WHERE id=1", null).use { it.moveToFirst() }
 
     fun createOwner(shop: String, pin: String) {
