@@ -1,6 +1,5 @@
 package com.aikhata.app
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Intent
@@ -14,13 +13,16 @@ import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.provider.MediaStore
 import android.text.InputType
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.*
 import androidx.core.content.FileProvider
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -39,11 +41,15 @@ import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private lateinit var db: KhataDatabase
     private lateinit var root: LinearLayout
     private var unlocked = false
     private var pendingCameraUri: Uri? = null
+    private lateinit var imagePicker: ActivityResultLauncher<String>
+    private lateinit var cameraCapture: ActivityResultLauncher<Uri>
+    private lateinit var backupCreator: ActivityResultLauncher<String>
+    private lateinit var backupPicker: ActivityResultLauncher<Array<String>>
     private var backAction: (() -> Unit)? = null
     private var currentScreen = "start"
     private var lastHomeBack = 0L
