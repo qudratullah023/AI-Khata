@@ -484,6 +484,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showSetup() {
+        composeNavController = null
         unlocked = false
         page("Welcome to AI Khata", "A simple, private khata for your shop.")
         val shop = input("Shop name")
@@ -509,6 +510,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showUnlock() {
+        composeNavController = null
         unlocked = false
         page(db.shopName(), "Enter your PIN to continue.")
         val pin = input("Shop PIN", true)
