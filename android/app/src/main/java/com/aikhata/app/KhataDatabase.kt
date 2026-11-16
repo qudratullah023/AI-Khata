@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -28,7 +30,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         if (oldVersion < 2) {
             // Convert stored rupees to integer paisa while preserving record IDs.
             db.execSQL("CREATE TABLE transactions_new (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE, transaction_date TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK(transaction_type IN ('credit','payment')), description TEXT NOT NULL DEFAULT '', amount_paisa INTEGER NOT NULL CHECK(amount_paisa > 0), created_at TEXT NOT NULL)")
-            db.execSQL("INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, MAX(1, CAST(ROUND(amount * 100) AS INTEGER)), created_at FROM transactions WHERE amount > 0")
+            db.execSQL("INSERT INTO transactions_new (id, customer_id, transaction_date, transaction_type, description, amount_paisa, created_at) SELECT id, customer_id, transaction_date, transaction_type, description, MAX(1, CAST(ROUND(amount * 100.0 + 0.000001) AS INTEGER)), created_at FROM transactions WHERE amount > 0")
             db.execSQL("DROP TABLE transactions")
             db.execSQL("ALTER TABLE transactions_new RENAME TO transactions")
             db.execSQL("CREATE INDEX idx_local_tx_customer_date ON transactions(customer_id, transaction_date)")
@@ -281,9 +283,13 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
     private fun toPaisa(amount: Double): Long {
         require(amount > 0 && amount.isFinite() && amount <= 9_000_000_000_000.0)
-        return kotlin.math.round(amount * 100.0).toLong().also {
-            require(it > 0) { "The amount is too small." }
-        }
+        return BigDecimal.valueOf(amount)
+            .movePointRight(2)
+            .setScale(0, RoundingMode.HALF_UP)
+            .longValueExact()
+            .also {
+                require(it > 0) { "The amount is too small." }
+            }
     }
 
     private fun derive(pin: String, salt: ByteArray) =
