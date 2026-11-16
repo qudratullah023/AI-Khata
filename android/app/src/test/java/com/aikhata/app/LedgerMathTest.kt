@@ -11,12 +11,14 @@ class LedgerMathTest {
     fun parsesCommaSeparatedAndDecimalAmounts() {
         assertEquals(1200.0, LedgerMath.parseAmount(" 1,200 ")!!, 0.001)
         assertEquals(1200.50, LedgerMath.parseAmount("1200.50")!!, 0.001)
+        assertEquals(1250.0, LedgerMath.parseAmount("1\t250")!!, 0.001)
     }
 
     @Test
     fun parsesUrduAndArabicIndicDigits() {
-        assertEquals(1200.0, LedgerMath.parseAmount("۱۲\u06f0۰"), 0.001)
-        assertEquals(1200.0, LedgerMath.parseAmount("١٢٠٠")!!, 0.001)\n        assertEquals(1200.50, LedgerMath.parseAmount("۱٬۲۰۰٫۵۰")!!, 0.001)\n        assertEquals(1250.0, LedgerMath.parseAmount("1\\t250")!!, 0.001)
+        assertEquals(1200.0, LedgerMath.parseAmount("۱۲\u06f0۰")!!, 0.001)
+        assertEquals(1200.0, LedgerMath.parseAmount("١٢٠٠")!!, 0.001)
+        assertEquals(1200.50, LedgerMath.parseAmount("۱٬۲۰۰٫۵۰")!!, 0.001)
     }
 
     @Test
