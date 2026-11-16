@@ -17,8 +17,8 @@ android {
         applicationId "com.aikhata.app"
         minSdk 23
         targetSdk 35
-        versionCode 6
-        versionName "2.4.0"
+        versionCode 7
+        versionName "2.5.0"
         buildConfigField "String", "AI_BACKEND_URL", '"https://ai-khata.onrender.com"'
     }
     buildFeatures { buildConfig true }
