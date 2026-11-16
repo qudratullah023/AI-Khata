@@ -137,6 +137,10 @@ class MainActivity : Activity() {
   root.addView(text("AI key is encrypted with Android Keystore. Only the selected photo is sent to Gemini when you scan.",13,muted))
   root.addView(button("Save AI key",{val v=api.text.toString().trim();if(v.isNotBlank()&&!v.startsWith("••")){saveApiKey(v);toast("AI key saved securely.")}else toast("Enter a new API key.")}))
   root.addView(button("Remove saved AI key",{deleteApiKey();toast("AI key removed.");showSettings()}))
+  root.addView(text("Local database backup",18,ink,true))
+  root.addView(text("Export a copy before changing phones or uninstalling. Restoring replaces the current customer and transaction records.",13,muted))
+  root.addView(button("Export backup file",{exportBackup()}))
+  root.addView(button("Restore backup file",{importBackup()}))
   root.addView(button("← Home",{showHome()}))
  }
  private fun chooseImage(){
@@ -147,7 +151,24 @@ class MainActivity : Activity() {
  @Deprecated("Uses legacy result API for Android 10 compatibility")
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
   super.onActivityResult(requestCode,resultCode,data)
-  if(requestCode==77&&resultCode==RESULT_OK&&data?.data!=null)runAiExtraction(data.data!!)
+  if(resultCode!=RESULT_OK || data?.data==null) return
+  when(requestCode) {
+   77 -> runAiExtraction(data.data!!)
+   78 -> try {
+    contentResolver.openOutputStream(data.data!!)?.use { it.write(db.exportBackup().toByteArray(Charsets.UTF_8)) }
+    toast("Backup exported. Keep that file somewhere safe.")
+   } catch(e:Exception) { toast("Backup export failed: "+e.message) }
+   79 -> try {
+    val json=contentResolver.openInputStream(data.data!!)!!.bufferedReader().use{it.readText()}
+    val parsed=JSONObject(json)
+    if(parsed.optString("format")!="ai-khata-backup") throw Exception("This file is not an AI Khata backup.")
+    AlertDialog.Builder(this).setTitle("Restore this backup?")
+     .setMessage("Restoring replaces the current customer and transaction records on this phone. Your current PIN stays unchanged. Export a backup of the current data first if you need it.")
+     .setNegativeButton("Cancel",null).setPositiveButton("Restore"){_,_->
+      try{db.restoreBackup(json);toast("Backup restored successfully.");showHome()}catch(e:Exception){toast("Restore failed: "+e.message)}
+     }.show()
+   } catch(e:Exception) { toast("Could not read backup: "+e.message) }
+  }
  }
  private fun runAiExtraction(uri:Uri){
   val progress=ProgressDialog(this);progress.show()
@@ -185,6 +206,14 @@ class MainActivity : Activity() {
     rows.forEach{e->val name=e.getString("name");val existing=db.customers().firstOrNull{it.name.equals(name,true)};val id=existing?.id?:db.addCustomer(name,"");db.addTransaction(id,e.getString("type"),e.getDouble("amount"),e.getString("description"),e.getString("date"))}
     toast("Confirmed entries saved on this phone.");showHome()
    }.show()
+ }
+ private fun exportBackup(){
+  val intent=Intent(Intent.ACTION_CREATE_DOCUMENT).apply{addCategory(Intent.CATEGORY_OPENABLE);type="application/json";putExtra(Intent.EXTRA_TITLE,"ai-khata-backup.json")}
+  startActivityForResult(intent,78)
+ }
+ private fun importBackup(){
+  val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply{addCategory(Intent.CATEGORY_OPENABLE);type="application/json"}
+  startActivityForResult(intent,79)
  }
  private fun hasApiKey()=prefs.contains("gemini_key")
  private fun saveApiKey(value:String){
