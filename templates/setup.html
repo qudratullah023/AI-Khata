@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Create shop account{% endblock %}
+{% block auth_content %}
+<section class="auth-card">
+  <div class="eyebrow"><span class="status-dot"></span> PRIVATE SHOP SETUP</div>
+  <h1>Make this shop yours.</h1>
+  <p class="muted">Create the shopkeeper account. Only someone with this username and PIN or password can open and change the ledger.</p>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Shop name<input name="shop_name" maxlength="80" placeholder="e.g. Noor General Store" required autocomplete="organization"></label>
+    <label>Shopkeeper username<input name="username" minlength="3" maxlength="40" pattern="[a-zA-Z0-9_.-]+" placeholder="Choose a username" required autocomplete="username"></label>
+    <label>Private PIN or password<input type="password" name="passcode" minlength="6" placeholder="6+ digit PIN or 8+ character password" required autocomplete="new-password"></label>
+    <label>Confirm PIN or password<input type="password" name="confirm_passcode" minlength="6" placeholder="Enter it again" required autocomplete="new-password"></label>
+    <button class="button button-primary button-full" type="submit">Create private shop account <span>→</span></button>
+  </form>
+  <div class="security-note"><span>⌑</span><div><strong>Your ledger is private</strong><small>Your access code is saved as a secure one-way hash. It is not stored as readable text.</small></div></div>
+</section>
+{% endblock %}
