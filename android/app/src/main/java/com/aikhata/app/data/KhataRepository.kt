@@ -21,6 +21,8 @@ data class DashboardSnapshot(
 }
 
 class KhataRepository(private val database: KhataDatabase) {
+    suspend fun loadCustomers(query: String = ""): List<CustomerRow> = withContext(Dispatchers.IO) { database.customers(query) }
+
     suspend fun loadDashboard(): DashboardSnapshot = withContext(Dispatchers.IO) {
         val totals = database.totals()
         val month = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
