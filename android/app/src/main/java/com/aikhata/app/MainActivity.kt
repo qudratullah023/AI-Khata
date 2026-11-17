@@ -1,6 +1,8 @@
 package com.aikhata.app
 
 import android.app.AlertDialog
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +11,8 @@ import android.net.NetworkCapabilities
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -67,6 +71,7 @@ import com.aikhata.app.ui.reports.ReportsViewModelFactory
 import com.aikhata.app.ui.settings.SettingsScreen
 import com.aikhata.app.ui.assistant.AssistantScreen
 import com.aikhata.app.ui.theme.AiKhataTheme
+import com.aikhata.app.ui.phaseb.PhaseBScreen
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,7 +98,15 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 
 class MainActivity : FragmentActivity() {
+    companion object {
+        const val ACTION_ADD_SALE = "com.aikhata.app.ADD_SALE"
+        const val ACTION_SCAN_PAGE = "com.aikhata.app.SCAN_PAGE"
+    }
+    private data class RetainedSession(val unlocked: Boolean, val staffMode: Boolean)
     private lateinit var db: KhataDatabase
+    private lateinit var phaseB: PhaseBStore
+    private var staffMode = false
+    private var pendingDeepAction: String? = null
     private lateinit var root: LinearLayout
     private var unlocked = false
     private var pendingCameraUri: Uri? = null
@@ -141,6 +154,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingDeepAction = intent?.action
         cropImage = registerForActivityResult(CropImageContract()) { result ->
             val croppedUri = result.uriContent
             when {
@@ -200,7 +214,9 @@ class MainActivity : FragmentActivity() {
                 } else finish()
             }
         })
-        db = KhataDatabase(this)
+        db = KhataDatabase(this, ShopRegistry.activeDatabaseName(this))
+        phaseB = PhaseBStore(this, ShopRegistry.activeShopId(this))
+        schedulePhaseBNotifications(this, phaseB)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         val darkSystemUi = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val systemBarColor = if (darkSystemUi) Color.rgb(8, 15, 24) else Color.rgb(241, 246, 250)
@@ -209,13 +225,16 @@ class MainActivity : FragmentActivity() {
         window.decorView.systemUiVisibility = if (darkSystemUi) 0 else
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         if (db.isSetUp()) {
-            if (lastCustomNonConfigurationInstance == true) {
-                // Keep the current session through a screen rotation, but not through process death.
+            val retained = lastCustomNonConfigurationInstance as? RetainedSession
+            if (retained?.unlocked == true) {
+                // Keep the exact permission level only through a configuration change.
                 unlocked = true
+                staffMode = retained.staffMode
                 when (savedInstanceState?.getString("current_screen")) {
                     "customers" -> showCustomers()
-                    "reports" -> showReports()
-                    "settings" -> showSettings()
+                    "reports" -> if (!staffMode) showReports() else showHome()
+                    "settings" -> if (!staffMode) showSettings() else showHome()
+                    "phase-b" -> { initialComposeRoute = "phase-b"; showHome() }
                     else -> showHome()
                 }
             } else {
@@ -227,7 +246,7 @@ class MainActivity : FragmentActivity() {
         checkLocalDatabaseHealth()
     }
 
-    override fun onRetainCustomNonConfigurationInstance(): Any? = unlocked
+    override fun onRetainCustomNonConfigurationInstance(): Any? = RetainedSession(unlocked, staffMode)
 
     override fun onStart() {
         super.onStart()
@@ -544,7 +563,9 @@ class MainActivity : FragmentActivity() {
                 toast("Enter a shop name and matching PIN with at least 6 digits.")
             } else {
                 db.createOwner(shop.text.toString().trim(), enteredPin)
+                ShopRegistry.updateActiveName(this, shop.text.toString().trim())
                 unlocked = true
+                staffMode = false
                 showHome()
             }
         }, true)
@@ -553,6 +574,7 @@ class MainActivity : FragmentActivity() {
     private fun showUnlock() {
         composeNavController = null
         unlocked = false
+        staffMode = false
         page(db.shopName(), "Enter your PIN to continue.")
         val pin = input("Shop PIN", true)
         root.addView(pin)
@@ -564,10 +586,18 @@ class MainActivity : FragmentActivity() {
                 toast("Too many attempts. Please wait $seconds seconds.")
                 return@button
             }
-            if (db.verifyPin(pin.text.toString())) {
+            val enteredPin = pin.text.toString()
+            val ownerPinMatches = db.verifyPin(enteredPin)
+            val staffPinMatches = !ownerPinMatches && phaseB.verifyStaffPin(enteredPin)
+            if (ownerPinMatches || staffPinMatches) {
                 prefs.edit().remove("pin_failures").remove("pin_locked_until").apply()
+                staffMode = staffPinMatches
                 unlocked = true
+                val action = pendingDeepAction
+                initialComposeRoute = if (action == ACTION_ADD_SALE) "customers" else "home"
+                pendingDeepAction = null
                 showHome()
+                if (action == ACTION_SCAN_PAGE) window.decorView.postDelayed({ chooseImage() }, 450L)
             } else {
                 val failures = prefs.getInt("pin_failures", 0) + 1
                 if (failures >= 5) {
@@ -613,6 +643,7 @@ class MainActivity : FragmentActivity() {
                     super.onAuthenticationSucceeded(result)
                     biometricPromptShowing = false
                     prefs.edit().remove("pin_failures").remove("pin_locked_until").apply()
+                    staffMode = false
                     unlocked = true
                     showHome()
                 }
@@ -671,6 +702,7 @@ class MainActivity : FragmentActivity() {
                         route == "settings" -> "settings"
                         route == "business" -> "business"
                         route == "assistant" -> "assistant"
+                        route == "phase-b" -> "phase-b"
                         else -> "home"
                     }
                 }
@@ -716,13 +748,16 @@ class MainActivity : FragmentActivity() {
                             onCustomers = { navController.navigate("customers") },
                             onAddCustomer = { addCustomerDialog() },
                             onReports = { navController.navigate("reports/" + today().take(7)) },
-                            onBusiness = { navController.navigate("business") },
-                            onScan = { chooseImage() },
+                            onBusiness = { if (!staffMode) navController.navigate("business") },
+                            onPhaseB = { if (!staffMode) navController.navigate("phase-b") },
+                            isStaff = staffMode,
+                            onScan = { if (!staffMode) chooseImage() },
                             onAssistant = { navController.navigate("assistant") },
                             onSettings = { navController.navigate("settings") },
                             onLock = {
                                 composeNavController = null
                                 unlocked = false
+                                staffMode = false
                                 showUnlock()
                             },
                             onBackup = { exportBackup() },
@@ -786,7 +821,8 @@ class MainActivity : FragmentActivity() {
                             onShareStatement = { shareStatement(customerId) },
                             onDeleteCustomer = { confirmDeleteCustomer(customerId) },
                             onEditTransaction = { editTransactionDialog(customerId, it) },
-                            onDeleteTransaction = { confirmDeleteTransaction(customerId, it) }
+                            onDeleteTransaction = { if (!staffMode) confirmDeleteTransaction(customerId, it) },
+                            staffMode = staffMode
                         )
                     }
                     composable("reports/{month}") { entry ->
@@ -799,10 +835,30 @@ class MainActivity : FragmentActivity() {
                         )
                     }
                     composable("business") {
-                        BusinessManagementScreen(
-                            database = db,
-                            onBack = { if (!navController.popBackStack()) showHome() }
-                        )
+                        if (staffMode) {
+                            Text("This section is unavailable in staff mode.")
+                        } else {
+                            BusinessManagementScreen(
+                                database = db,
+                                onBack = { if (!navController.popBackStack()) showHome() }
+                            )
+                        }
+                    }
+                    composable("phase-b") {
+                        if (staffMode) {
+                            Text("Business management is unavailable in staff mode.")
+                        } else {
+                            PhaseBScreen(
+                                database = db,
+                                store = phaseB,
+                                isStaff = staffMode,
+                                onBack = { if (!navController.popBackStack()) showHome() },
+                                onOpenCustomer = { navController.navigate("customer/" + it) },
+                                onShareStatement = { shareStatement(it) },
+                                onPrintStatement = { printStatementBluetooth(it) },
+                                onSwitchShop = { switchShop(it) }
+                            )
+                        }
                     }
                     composable("settings") {
                         SettingsScreen(
@@ -825,6 +881,7 @@ class MainActivity : FragmentActivity() {
                             onSaveShopName = { value ->
                                 if (value.isNotBlank()) {
                                     db.updateShopName(value.take(80))
+                                    ShopRegistry.updateActiveName(this@MainActivity, value.take(80))
                                     toast("Shop name updated.")
                                     showSettings()
                                 } else toast("Enter a shop name.")
@@ -1203,33 +1260,72 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun shareStatement(customerId: Long) {
+        if (!phaseB.customerMeta(customerId).shareOptIn) {
+            toast("Statement sharing is off for this customer. Enable it in Business tools → Customers first.")
+            return
+        }
         val customer = db.customer(customerId) ?: return
         val entries = db.transactions(customerId)
         val credits = entries.filter { it.type == "credit" }.sumOf { it.amount }
         val payments = entries.filter { it.type == "payment" }.sumOf { it.amount }
-        val statement = buildString {
-            append(db.shopName()).append("\n")
-            append("Account statement: ").append(customer.name).append("\n")
-            if (customer.phone.isNotBlank()) append("Phone: ").append(customer.phone).append("\n")
-            append("------------------------------\n")
+        val wallet = phaseB.walletReferences()
+        val lines = buildList {
+            add(db.shopName())
+            add("CUSTOMER ACCOUNT STATEMENT")
+            add(customer.name)
+            if (customer.phone.isNotBlank()) add("Phone: " + customer.phone)
+            add("")
             entries.forEach {
-                append(it.date).append(" | ")
-                    .append(if (it.type == "credit") "Credit" else "Payment")
-                    .append(" | ").append(money(it.amount))
-                if (it.description.isNotBlank()) append(" | ").append(it.description)
-                append("\n")
+                add("${it.date} | ${if (it.type == "credit") "Credit / sale" else "Payment"} | ${money(it.amount)}" +
+                    if (it.description.isBlank()) "" else " | " + it.description)
             }
-            append("------------------------------\n")
-            append("Total credit: ").append(money(credits)).append("\n")
-            append("Total paid: ").append(money(payments)).append("\n")
-            append("Balance due: ").append(money(credits - payments))
+            add("")
+            add("Total credit: " + money(credits))
+            add("Total paid: " + money(payments))
+            add("Balance due: " + money(credits - payments))
+            if (wallet.jazzCash.isNotBlank()) add("JazzCash: " + wallet.jazzCash)
+            if (wallet.easypaisa.isNotBlank()) add("Easypaisa: " + wallet.easypaisa)
         }
+        val pdf = PdfDocument()
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11f; color = Color.BLACK }
+        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        var page = pdf.startPage(pageInfo)
+        var canvas = page.canvas
+        var y = 46f
+        var pageNumber = 1
+        lines.forEach { original ->
+            val wrapped = original.chunked(78).ifEmpty { listOf("") }
+            wrapped.forEach { line ->
+                if (y > 800f) {
+                    pdf.finishPage(page)
+                    pageNumber++
+                    page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNumber).create())
+                    canvas = page.canvas
+                    y = 46f
+                }
+                canvas.drawText(line, 38f, y, paint)
+                y += 20f
+            }
+        }
+        pdf.finishPage(page)
+        val outDir = File(cacheDir, "statements").apply { mkdirs() }
+        val outFile = File(outDir, "statement_${customerId}_${System.currentTimeMillis()}.pdf")
+        try {
+            FileOutputStream(outFile).use { pdf.writeTo(it) }
+        } catch (error: Exception) {
+            toast("Could not create the statement PDF.")
+            return
+        } finally {
+            pdf.close()
+        }
+        val uri = FileProvider.getUriForFile(this, packageName + ".fileprovider", outFile)
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
+            type = "application/pdf"
             putExtra(Intent.EXTRA_SUBJECT, "Khata statement - " + customer.name)
-            putExtra(Intent.EXTRA_TEXT, statement)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(send, "Share account statement"))
+        startActivity(Intent.createChooser(send, "Share read-only statement PDF"))
     }
 
     private fun shareMonthlyReport(month: String) {
