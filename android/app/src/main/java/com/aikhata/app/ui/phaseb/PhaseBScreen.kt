@@ -32,6 +32,7 @@ fun PhaseBScreen(
     database: KhataDatabase,
     store: PhaseBStore,
     isStaff: Boolean,
+    ownerPinMatches: (String) -> Boolean,
     onBack: () -> Unit,
     onOpenCustomer: (Long) -> Unit,
     onShareStatement: (Long) -> Unit,
@@ -357,8 +358,12 @@ fun PhaseBScreen(
                                 Text("Set a separate staff PIN. Staff can add customer sales but cannot delete records or view profit and loss.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                                 OutlinedTextField(value = staffPin, onValueChange = { staffPin = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("New staff PIN (6+ digits)") }, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                                 Button(onClick = {
-                                    runCatching { store.setStaffPin(staffPin); staffPin = ""; message = "Staff PIN saved. At the unlock screen, staff can enter this PIN." }
-                                        .onFailure { message = it.message ?: "Could not save staff PIN." }
+                                    runCatching {
+                                        require(!ownerPinMatches(staffPin)) { "The staff PIN must be different from the owner PIN." }
+                                        store.setStaffPin(staffPin)
+                                        staffPin = ""
+                                        message = "Staff PIN saved. At the unlock screen, staff can enter this PIN."
+                                    }.onFailure { message = it.message ?: "Could not save staff PIN." }
                                 }, modifier = Modifier.fillMaxWidth(), enabled = staffPin.length >= 6 && !isStaff) { Text(if (store.hasStaffPin()) "Update staff PIN" else "Set staff PIN") }
                                 if (store.hasStaffPin() && !isStaff) {
                                     OutlinedButton(onClick = { store.clearStaffPin(); message = "Staff PIN removed." }, modifier = Modifier.fillMaxWidth()) { Text("Remove staff PIN") }
