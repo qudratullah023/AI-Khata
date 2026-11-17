@@ -55,4 +55,4 @@ The Android app now includes an offline business workspace with three sections:
 
 The calculation deliberately distinguishes cash collection from revenue. A customer payment settles an earlier balance and is not counted as a second sale. Older/manual credit entries without a saved product cost are excluded from this tracked-product profit estimate, so the estimate does not pretend to know their cost.
 
-The local database upgrades to schema version 3 without discarding existing customer or transaction records. Password-protected backups now include products, expenses and product-sale cost snapshots; older version-1 backups remain restorable (they do not contain inventory or expense data).
+The local database upgrades to schema version 3 without discarding existing customer or transaction records. Password-protected backups now include products, expenses and product-sale cost snapshots; older version-1 backups remain restorable (they do not contain inventory or expense data). Deleting a product-sale entry or deleting a customer restores the quantities from that customer's product sales to inventory. Transaction edits also validate the entered date.
