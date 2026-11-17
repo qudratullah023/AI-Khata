@@ -583,7 +583,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
             else {
                 val credit = cursor.getLong(0) / 100.0
                 val payments = cursor.getLong(1) / 100.0
-                Triple(credit, payments, credit)
+                Triple(credit, payments, (credit - payments).coerceAtLeast(0.0))
             }
         }
     }
