@@ -897,9 +897,13 @@ class MainActivity : FragmentActivity() {
                             },
                             onChangePin = { pin, confirm ->
                                 if (pin.length >= 6 && pin.all { it.isDigit() } && pin == confirm) {
-                                    db.changePin(pin)
-                                    toast("Your PIN has been changed.")
-                                    showSettings()
+                                    if (phaseB.verifyStaffPin(pin)) {
+                                        toast("Choose an owner PIN that is different from the staff PIN.")
+                                    } else {
+                                        db.changePin(pin)
+                                        toast("Your PIN has been changed.")
+                                        showSettings()
+                                    }
                                 } else toast("Your PINs must match and contain at least 6 digits.")
                             },
                             onToggleBiometric = { enabled ->
