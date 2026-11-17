@@ -1,9 +1,7 @@
 package com.aikhata.app.ui.assistant
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -49,7 +47,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -218,7 +215,7 @@ fun AssistantScreen(
                         Spacer(Modifier.width(8.dp))
                         Button(enabled = input.isNotBlank() && !loading, onClick = { submit() }) { Text("Send") }
                     }
-                    Text("Customer history is read from your local ledger. New entries need your approval.",
+                    Text("Only the matched customer's ledger details are sent to your configured Gemini API for this answer. New entries need your approval.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
                 }
             }
