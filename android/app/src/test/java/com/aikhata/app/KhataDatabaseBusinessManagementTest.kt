@@ -73,8 +73,33 @@ class KhataDatabaseBusinessManagementTest {
             )
             assertEquals(7.0, database.products().single().stockQuantity, 0.001)
 
+            database.recordProductSale(customerId, productId, 3.0, 250.0, "Second sale", "2026-11-11")
+            assertEquals(4.0, database.products().single().stockQuantity, 0.001)
             assertEquals(1, database.deleteCustomer(customerId))
             assertEquals(10.0, database.products().single().stockQuantity, 0.001)
+        } finally {
+            database.close()
+            context.deleteDatabase("ai_khata_local.db")
+        }
+    }
+
+    @Test
+    fun incompleteProductSaleMetadataIsRejectedWithoutWritingLedgerEntry() {
+        val context = RuntimeEnvironment.getApplication()
+        context.deleteDatabase("ai_khata_local.db")
+        val database = KhataDatabase(context)
+        try {
+            database.createOwner("Test shop", "123456")
+            val customerId = database.addCustomer("Amina", "")
+            var failed = false
+            try {
+                database.addTransaction(customerId, "credit", 100.0, "Invalid sale", "2026-11-10",
+                    productId = null, quantity = 1.0, unitCost = 20.0)
+            } catch (_: IllegalArgumentException) {
+                failed = true
+            }
+            assertTrue(failed)
+            assertTrue(database.transactions(customerId).isEmpty())
         } finally {
             database.close()
             context.deleteDatabase("ai_khata_local.db")
