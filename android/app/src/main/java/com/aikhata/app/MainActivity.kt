@@ -62,6 +62,7 @@ import com.aikhata.app.ui.reports.ReportsScreen
 import com.aikhata.app.ui.reports.ReportsViewModel
 import com.aikhata.app.ui.reports.ReportsViewModelFactory
 import com.aikhata.app.ui.settings.SettingsScreen
+import com.aikhata.app.ui.assistant.AssistantScreen
 import com.aikhata.app.ui.theme.AiKhataTheme
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
@@ -638,6 +639,7 @@ class MainActivity : FragmentActivity() {
                         route.startsWith("reports/") -> "reports"
                         route == "settings" -> "settings"
                         route == "business" -> "business"
+                        route == "assistant" -> "assistant"
                         else -> "home"
                     }
                 }
@@ -684,6 +686,7 @@ class MainActivity : FragmentActivity() {
                             onReports = { navController.navigate("reports/" + today().take(7)) },
                             onBusiness = { navController.navigate("business") },
                             onScan = { chooseImage() },
+                            onAssistant = { navController.navigate("assistant") },
                             onSettings = { navController.navigate("settings") },
                             onLock = {
                                 composeNavController = null
@@ -695,6 +698,29 @@ class MainActivity : FragmentActivity() {
                             waitingPhotoCount = waitingPhotos,
                             onCustomerClick = { navController.navigate("customer/" + it) },
                             onRefresh = { homeViewModel.refresh() }
+                        )
+                    }
+                    composable("assistant") {
+                        AssistantScreen(
+                            customers = db.customers().take(80),
+                            onBack = { if (!navController.popBackStack()) showHome() },
+                            onCustomerSelected = { navController.navigate("customer/" + it) },
+                            onSettings = { navController.navigate("settings") },
+                            onSend = { instruction, complete ->
+                                Thread {
+                                    try {
+                                        val draft = AiBusinessAssistant().interpret(
+                                            instruction,
+                                            db.customers().map { it.name },
+                                            apiKeys()
+                                        )
+                                        runOnUiThread { complete(Result.success(draft)) }
+                                    } catch (error: Exception) {
+                                        runOnUiThread { complete(Result.failure(error)) }
+                                    }
+                                }.start()
+                            },
+                            onConfirmDraft = { entries -> reviewAiEntries(entries) }
                         )
                     }
                     composable("customers") {
