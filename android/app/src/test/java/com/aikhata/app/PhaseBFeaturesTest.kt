@@ -154,16 +154,22 @@ class PhaseBFeaturesTest {
         val name = "phase_b_search_test.db"
         context.deleteDatabase(name)
         val db = KhataDatabase(context, name)
+        val store = PhaseBStore(context, "phase_b_search_test")
         try {
             val customerId = db.addCustomer("Amina Khan", "03005550123")
             db.addProduct("Rice", "R-101", "kg", 200.0, 250.0, 10.0, 2.0)
             db.addTransaction(customerId, "credit", 1250.0, "Rice order", "2026-11-17")
             db.addTransaction(customerId, "payment", 250.0, "Cash received", "2026-11-17")
+            val supplierId = store.addSupplier("Wholesale Market", "03007776655")
+            store.addSupplierEntry(supplierId, "payable", 800.0, "Rice stock", "2026-11-17")
 
             assertTrue(db.searchEverything("03005550123").any { it.kind == "Customer" })
             assertTrue(db.searchEverything("Rice").any { it.kind == "Product" })
             assertTrue(db.searchEverything("2026-11-17").any { it.kind == "Entry" })
             assertTrue(db.searchEverything("1250").any { it.kind == "Entry" })
+            assertTrue(store.searchSupplierEntries("Wholesale").any { it.kind == "Supplier" })
+            assertTrue(store.searchSupplierEntries("Rice stock").any { it.kind == "Supplier entry" })
+            assertTrue(store.searchSupplierEntries("800").any { it.kind == "Supplier entry" })
 
             val summary = db.dailySummary("2026-11-17")
             assertEquals(1250.0, summary.first, 0.001)
@@ -171,8 +177,27 @@ class PhaseBFeaturesTest {
             assertEquals(1000.0, summary.third, 0.001)
         } finally {
             db.close()
+            store.close()
             context.deleteDatabase(name)
+            context.deleteDatabase("ai_khata_phase_b_phase_b_search_test.db")
         }
+    }
+
+    @Test
+    fun shopRegistryCreatesAndSwitchesIndependentShops() {
+        val prefs = context.getSharedPreferences("ai_khata_shop_registry", android.content.Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val shops = ShopRegistry.shops(context)
+        assertEquals("default", shops.single().id)
+        val created = ShopRegistry.createShop(context, "Second shop", "445566")
+        assertEquals(2, ShopRegistry.shops(context).size)
+        assertTrue(KhataDatabase(context, created.databaseName).useForTest { it.verifyPin("445566") })
+        ShopRegistry.switchTo(context, created.id)
+        assertEquals(created.id, ShopRegistry.activeShopId(context))
+        assertEquals(created.databaseName, ShopRegistry.activeDatabaseName(context))
+        context.deleteDatabase(created.databaseName)
+        context.deleteDatabase("ai_khata_local.db")
+        prefs.edit().clear().commit()
     }
 
     @Test
@@ -230,3 +255,5 @@ class PhaseBFeaturesTest {
         }
     }
 }
+
+private inline fun <T> KhataDatabase.useForTest(block: (KhataDatabase) -> T): T = try { block(this) } finally { close() }
