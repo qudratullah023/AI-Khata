@@ -598,12 +598,16 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
         var overduePaisa = 0L
         customers().forEach { customer ->
             val outstanding = ArrayList<Pair<String, Long>>()
+            var customerAdvancePaisa = 0L
             transactions(customer.id)
                 .sortedWith(compareBy<TransactionRow> { it.date }.thenBy { it.id })
                 .forEach { entry ->
                     val amountPaisa = Math.round(entry.amount * 100.0)
                     if (entry.type == "credit") {
-                        outstanding.add(entry.date to amountPaisa)
+                        val advanceUsed = minOf(customerAdvancePaisa, amountPaisa)
+                        customerAdvancePaisa -= advanceUsed
+                        val remainingCredit = amountPaisa - advanceUsed
+                        if (remainingCredit > 0L) outstanding.add(entry.date to remainingCredit)
                     } else {
                         var remaining = amountPaisa
                         var index = 0
@@ -614,6 +618,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
                             remaining -= applied
                             index++
                         }
+                        customerAdvancePaisa += remaining
                     }
                 }
             val overdueForCustomer = outstanding
