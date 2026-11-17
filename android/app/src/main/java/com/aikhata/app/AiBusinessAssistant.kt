@@ -12,7 +12,7 @@ class AiBusinessAssistant {
     fun interpret(instruction: String, customerNames: List<String>, apiKeys: List<String>): AssistantDraft {
         require(instruction.isNotBlank()) { "Write or dictate what happened first." }
         require(apiKeys.isNotEmpty()) { "Add a Gemini API key in Settings to use the AI assistant." }
-        val today = java.time.LocalDate.now().toString()
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
         val prompt = """
 You are the careful bookkeeping assistant inside AI Khata.
 Understand English, Urdu written in Latin letters (Roman Urdu), and mixed language.
