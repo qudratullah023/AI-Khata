@@ -161,7 +161,9 @@ fun PhaseBScreen(
                                     onClick = {
                                         searching = true
                                         scope.launch {
-                                            searchResults = withContext(Dispatchers.IO) { database.searchEverything(query) }
+                                            searchResults = withContext(Dispatchers.IO) {
+                                                (database.searchEverything(query) + store.searchSupplierEntries(query)).take(60)
+                                            }
                                             searching = false
                                         }
                                     },
