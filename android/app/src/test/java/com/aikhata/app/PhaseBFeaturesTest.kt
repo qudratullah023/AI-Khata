@@ -61,6 +61,27 @@ class PhaseBFeaturesTest {
     }
 
     @Test
+    fun supplierReminderCountsOnlyUnpaidAmountsPastCutoff() {
+        val store = PhaseBStore(context, "phase_b_overdue_test")
+        try {
+            val oldSupplier = store.addSupplier("Old supplier", "")
+            store.addSupplierEntry(oldSupplier, "payable", 12500.0, "October stock", "2026-10-01")
+            store.addSupplierEntry(oldSupplier, "payable", 3000.0, "November stock", "2026-11-01")
+            store.addSupplierEntry(oldSupplier, "payment", 13000.0, "Partial settlement", "2026-11-02")
+
+            val overdueSupplier = store.addSupplier("Overdue supplier", "")
+            store.addSupplierEntry(overdueSupplier, "payable", 1000.0, "Old balance", "2026-10-02")
+
+            val summary = store.overdueSupplierSummary("2026-10-18")
+            assertEquals(1, summary.first)
+            assertEquals(1000.0, summary.second, 0.001)
+        } finally {
+            store.close()
+            context.deleteDatabase("ai_khata_phase_b_phase_b_overdue_test.db")
+        }
+    }
+
+    @Test
     fun newShopDatabaseDoesNotLeakCustomersFromDefaultShop() {
         val defaultName = "phase_b_default_isolation.db"
         val secondName = "phase_b_second_isolation.db"
