@@ -641,6 +641,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
         val people = org.json.JSONArray()
         customers().forEach { customer ->
             val person = org.json.JSONObject()
+                .put("id", customer.id)
                 .put("name", customer.name)
                 .put("phone", customer.phone)
             val entries = org.json.JSONArray()
@@ -731,6 +732,8 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
                 val name = person.optString("name").trim()
                 if (name.isBlank()) continue
                 val customerValues = ContentValues().apply {
+                    val savedId = person.optLong("id", -1L)
+                    if (savedId > 0L) put("id", savedId)
                     put("name", name)
                     put("phone", person.optString("phone").take(30))
                     put("created_at", now())
@@ -777,6 +780,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
         backupVersion: Int
     ) {
         val productIds = mutableSetOf<Long>()
+        val customerIds = mutableSetOf<Long>()
         if (backupVersion >= 2) {
             val productsValue = root.opt("products")
             require(productsValue == null || productsValue == org.json.JSONObject.NULL ||
@@ -819,6 +823,12 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
                 ?: throw IllegalArgumentException("A customer record in this backup is damaged.")
             require(person.optString("name").trim().isNotBlank()) {
                 "A customer record has no name."
+            }
+            if (person.has("id") && !person.isNull("id")) {
+                val savedId = person.optLong("id", -1L)
+                require(savedId > 0L && customerIds.add(savedId)) {
+                    "A customer ID in this backup is invalid or duplicated."
+                }
             }
             val transactionsValue = person.opt("transactions")
             require(transactionsValue == null || transactionsValue == org.json.JSONObject.NULL ||
