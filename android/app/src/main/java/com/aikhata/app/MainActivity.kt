@@ -782,6 +782,17 @@ class MainActivity : FragmentActivity() {
                             biometricEnabled = prefs.getBoolean("biometric_enabled", false),
                             apiKeyCount = apiKeyCount(),
                             appVersion = BuildConfig.VERSION_NAME,
+                            visualStyle = visualStyle,
+                            onVisualStyleChange = { selected ->
+                                visualStyle = selected
+                                prefs.edit().putString("visual_style", selected).apply()
+                                val label = when (selected) {
+                                    "soft" -> "Soft UI · Neumorphism"
+                                    "glass" -> "Glassmorphism"
+                                    else -> "Liquid Glass"
+                                }
+                                toast("$label theme applied.")
+                            },
                             onBack = { if (!navController.popBackStack()) showHome() },
                             onSaveShopName = { value ->
                                 if (value.isNotBlank()) {
