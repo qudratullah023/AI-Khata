@@ -599,7 +599,10 @@ class MainActivity : FragmentActivity() {
                 initialComposeRoute = if (action == ACTION_ADD_SALE) "customers" else "home"
                 pendingDeepAction = null
                 showHome()
-                if (action == ACTION_SCAN_PAGE) window.decorView.postDelayed({ chooseImage() }, 450L)
+                if (action == ACTION_SCAN_PAGE) {
+                    if (staffMode) toast("Photo scanning is available to the shop owner only.")
+                    else window.decorView.postDelayed({ chooseImage() }, 450L)
+                }
             } else {
                 val failures = prefs.getInt("pin_failures", 0) + 1
                 if (failures >= 5) {
@@ -763,8 +766,8 @@ class MainActivity : FragmentActivity() {
                                 showUnlock()
                             },
                             onBackup = { exportBackup() },
-                            onRetryScans = { processNextQueuedPhoto() },
-                            waitingPhotoCount = waitingPhotos,
+                            onRetryScans = { if (!staffMode) processNextQueuedPhoto() },
+                            waitingPhotoCount = if (staffMode) 0 else waitingPhotos,
                             onCustomerClick = { navController.navigate("customer/" + it) },
                             onRefresh = { homeViewModel.refresh() }
                         )
@@ -1358,9 +1361,13 @@ class MainActivity : FragmentActivity() {
             }
             ACTION_SCAN_PAGE -> {
                 pendingDeepAction = null
-                initialComposeRoute = "home"
-                showHome()
-                window.decorView.postDelayed({ chooseImage() }, 450L)
+                if (staffMode) {
+                    toast("Photo scanning is available to the shop owner only.")
+                } else {
+                    initialComposeRoute = "home"
+                    showHome()
+                    window.decorView.postDelayed({ chooseImage() }, 450L)
+                }
             }
         }
     }
