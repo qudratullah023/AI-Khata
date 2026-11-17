@@ -140,7 +140,7 @@ fun AssistantScreen(
                                         loading = false
                                         result.onSuccess { response ->
                                             messages.add(ChatLine(response.reply, false))
-                                            draft = response.entries.takeIf { it.length > 0 }
+                                            draft = response.entries.takeIf { it.length() > 0 }
                                         }.onFailure { messages.add(ChatLine(it.message ?: "I couldn't understand that. Please try again.", false)) }
                                     }
                                 }
@@ -157,7 +157,7 @@ fun AssistantScreen(
                                         loading = false
                                         result.onSuccess { response ->
                                             messages.add(ChatLine(response.reply, false))
-                                            draft = response.entries.takeIf { it.length > 0 }
+                                            draft = response.entries.takeIf { it.length() > 0 }
                                         }.onFailure { messages.add(ChatLine(it.message ?: "I couldn't understand that. Please try again.", false)) }
                                     }
                                 }
