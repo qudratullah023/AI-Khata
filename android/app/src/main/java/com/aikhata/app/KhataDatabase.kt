@@ -65,6 +65,21 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         }
     }
 
+    /**
+     * Read-only SQLite health check. Run this on a background thread because quick_check
+     * scans database pages. It never attempts to alter, rebuild, or delete user records.
+     */
+    fun checkIntegrity(): Boolean {
+        val db = readableDatabase
+        val quickCheckPassed = db.rawQuery("PRAGMA quick_check(1)", null).use { cursor ->
+            cursor.moveToFirst() && cursor.getString(0).equals("ok", ignoreCase = true)
+        }
+        if (!quickCheckPassed) return false
+        return db.rawQuery("PRAGMA foreign_key_check", null).use { cursor ->
+            !cursor.moveToFirst()
+        }
+    }
+
     fun <T> inTransaction(operation: () -> T): T {
         val db = writableDatabase
         db.beginTransaction()
@@ -540,6 +555,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         }
         val people = root.optJSONArray("customers")
             ?: throw IllegalArgumentException("Backup has no customer list.")
+        validateBackupContents(root, people, backupVersion)
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -613,9 +629,9 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
                         val newProductId = productIds[oldProductId]
                         val quantity = tx.optDouble("quantity", Double.NaN)
                         val unitCost = tx.optDouble("unit_cost", Double.NaN)
-                        if (newProductId != null && quantity.isFinite() && quantity > 0 &&
-                            unitCost.isFinite() && unitCost >= 0) {
-                            put("product_id", newProductId)
+                        // Keep historical cost snapshots even when the product was later deleted.
+                        if (quantity.isFinite() && quantity > 0 && unitCost.isFinite() && unitCost >= 0) {
+                            if (newProductId != null) put("product_id", newProductId)
                             put("quantity_milli", toMilli(quantity, allowZero = false))
                             put("unit_cost_paisa", toPaisaNonNegative(unitCost))
                         }
@@ -626,6 +642,89 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    private fun validateBackupContents(
+        root: org.json.JSONObject,
+        people: org.json.JSONArray,
+        backupVersion: Int
+    ) {
+        val productIds = mutableSetOf<Long>()
+        if (backupVersion >= 2) {
+            val productsValue = root.opt("products")
+            require(productsValue == null || productsValue == org.json.JSONObject.NULL ||
+                productsValue is org.json.JSONArray) { "The backup product list is damaged." }
+            val products = root.optJSONArray("products") ?: org.json.JSONArray()
+            for (index in 0 until products.length()) {
+                val item = products.optJSONObject(index)
+                    ?: throw IllegalArgumentException("A product record in this backup is damaged.")
+                val id = item.optLong("id", -1L)
+                val name = item.optString("name").trim()
+                val purchase = item.optDouble("purchase_price", Double.NaN)
+                val selling = item.optDouble("selling_price", Double.NaN)
+                val stock = item.optDouble("stock", Double.NaN)
+                val lowStock = item.optDouble("low_stock", 5.0)
+                require(id > 0 && productIds.add(id) && name.isNotBlank() &&
+                    purchase.isFinite() && purchase >= 0.0 && purchase <= 9_000_000_000_000.0 &&
+                    selling.isFinite() && selling > 0.0 && selling <= 9_000_000_000_000.0 &&
+                    stock.isFinite() && stock >= 0.0 && stock <= 9_000_000_000.0 &&
+                    lowStock.isFinite() && lowStock >= 0.0 && lowStock <= 9_000_000_000.0
+                ) { "A product record in this backup is invalid." }
+            }
+            val expensesValue = root.opt("expenses")
+            require(expensesValue == null || expensesValue == org.json.JSONObject.NULL ||
+                expensesValue is org.json.JSONArray) { "The backup expense list is damaged." }
+            val expenses = root.optJSONArray("expenses") ?: org.json.JSONArray()
+            for (index in 0 until expenses.length()) {
+                val item = expenses.optJSONObject(index)
+                    ?: throw IllegalArgumentException("An expense record in this backup is damaged.")
+                val day = item.optString("date")
+                val category = item.optString("category").trim()
+                val amount = item.optDouble("amount", Double.NaN)
+                require(LedgerMath.isValidDate(day) && category.isNotBlank() &&
+                    amount.isFinite() && amount > 0.0 && amount <= 9_000_000_000_000.0
+                ) { "An expense record in this backup is invalid." }
+            }
+        }
+
+        for (index in 0 until people.length()) {
+            val person = people.optJSONObject(index)
+                ?: throw IllegalArgumentException("A customer record in this backup is damaged.")
+            require(person.optString("name").trim().isNotBlank()) {
+                "A customer record has no name."
+            }
+            val transactionsValue = person.opt("transactions")
+            require(transactionsValue == null || transactionsValue == org.json.JSONObject.NULL ||
+                transactionsValue is org.json.JSONArray) { "A customer transaction list is damaged." }
+            val entries = person.optJSONArray("transactions") ?: org.json.JSONArray()
+            for (entryIndex in 0 until entries.length()) {
+                val tx = entries.optJSONObject(entryIndex)
+                    ?: throw IllegalArgumentException("A transaction in this backup is damaged.")
+                val type = tx.optString("type")
+                val amount = tx.optDouble("amount", Double.NaN)
+                val day = tx.optString("date")
+                require(type in listOf("credit", "payment") && amount.isFinite() &&
+                    amount > 0.0 && amount <= 9_000_000_000_000.0 && LedgerMath.isValidDate(day)
+                ) { "A transaction in this backup is invalid." }
+
+                val hasProductId = tx.has("product_id") && !tx.isNull("product_id")
+                if (hasProductId) {
+                    require(backupVersion >= 2 && productIds.contains(tx.optLong("product_id", -1L))) {
+                        "A transaction refers to a product that is missing from this backup."
+                    }
+                }
+                val hasQuantity = tx.has("quantity") && !tx.isNull("quantity")
+                val hasUnitCost = tx.has("unit_cost") && !tx.isNull("unit_cost")
+                require(hasQuantity == hasUnitCost) { "A sale cost snapshot in this backup is incomplete." }
+                if (hasQuantity) {
+                    val quantity = tx.optDouble("quantity", Double.NaN)
+                    val unitCost = tx.optDouble("unit_cost", Double.NaN)
+                    require(quantity.isFinite() && quantity > 0.0 && quantity <= 9_000_000_000.0 &&
+                        unitCost.isFinite() && unitCost >= 0.0 && unitCost <= 9_000_000_000_000.0
+                    ) { "A sale cost snapshot in this backup is invalid." }
+                }
+            }
         }
     }
 
