@@ -25,6 +25,8 @@ The roadmap mentions an automatic repair message. AI Khata will **not** silently
 | Android 9 / API 28 | Robolectric database tests | Upgrade from an older install and test backup restore |
 | Android 13 / API 33 | Robolectric database tests | Notification permission and background behaviour |
 | Android 15 / API 35 | Robolectric database tests | Install, rotate, navigate and test with real files |
+| Android 16 / API 36 | Not yet covered by this branch's SDK 35 toolchain | Add after the Android Gradle Plugin / SDK migration; verify the new Play target behaviour |
+| Android 17 / API 37 (current stable) | Not yet covered by this branch's SDK 35 toolchain | Add after SDK/toolchain and Robolectric support are upgraded |
 | Android 10 / API 29 (target user device) | Not a separate Robolectric matrix target in this first pass | Full manual smoke test on the Infinix X683 |
 | Small and large screens | Compose/unit build coverage only | Check overflow, font scaling, landscape and tablet widths |
 | Low RAM / slow network / offline | Not fully automated | Exercise core ledgers offline; scan queue/network retry; repeated background/foreground |
@@ -53,3 +55,13 @@ Robolectric tests are not a substitute for real-device testing. Current CI build
 4. Try a wrong password and a modified backup file; confirm the app refuses them and does not clear existing records.
 5. Try an oversized backup and confirm a clear error appears instead of an app crash.
 6. Confirm the integrity test reports a deliberately broken foreign-key relationship as unhealthy. This is a test-only database mutation, not a step to perform on real shop data.
+
+
+## Google Play / platform readiness note (17 November 2026)
+
+The current Android module uses compileSdk 35, targetSdk 35, minSdk 23 and Android Gradle Plugin 8.7.3. Android 17 (API 37) is the current stable Android release. Google Play requires new apps and app updates submitted from 31 August 2026 to target Android 16 (API 36) or higher. This branch's APK is therefore a **test build, not a Play-submission-ready build**. The next platform task is a separately tested API 36 toolchain migration; the app can keep minSdk 23 so Android 6 and the user's Android 10 device are not intentionally dropped. Do not raise targetSdk until the required Gradle / Android Gradle Plugin versions and behaviour changes have been built and tested.
+
+Official references:
+- Google Play target API requirement: https://support.google.com/googleplay/android-developer/answer/11926878
+- Android 17 stable release announcement: https://android-developers.googleblog.com/2026/06/Android-17.html
+- Android Gradle Plugin / Gradle compatibility table: https://developer.android.com/build/releases/about-agp
