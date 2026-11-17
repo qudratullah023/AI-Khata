@@ -769,7 +769,9 @@ class MainActivity : FragmentActivity() {
                         )
                     }
                     composable("assistant") {
-                        AssistantScreen(
+                        if (staffMode) {
+                            Text("AI Bookkeeper is unavailable in staff mode.")
+                        } else AssistantScreen(
                             customers = db.customers().take(250),
                             visualStyle = visualStyle,
                             onVisualStyleChange = { selected ->
@@ -828,7 +830,9 @@ class MainActivity : FragmentActivity() {
                     }
                     composable("reports/{month}") { entry ->
                         val month = entry.arguments?.getString("month") ?: today().take(7)
-                        ReportsScreen(
+                        if (staffMode) {
+                            Text("Reports are unavailable in staff mode.")
+                        } else ReportsScreen(
                             initialMonth = month,
                             viewModel = reportsViewModel,
                             onBack = { if (!navController.popBackStack()) showHome() },
@@ -853,6 +857,7 @@ class MainActivity : FragmentActivity() {
                                 database = db,
                                 store = phaseB,
                                 isStaff = staffMode,
+                                ownerPinMatches = { db.verifyPin(it) },
                                 onBack = { if (!navController.popBackStack()) showHome() },
                                 onOpenCustomer = { navController.navigate("customer/" + it) },
                                 onShareStatement = { shareStatement(it) },
@@ -862,7 +867,9 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                     composable("settings") {
-                        SettingsScreen(
+                        if (staffMode) {
+                            Text("Settings are available to the shop owner only.")
+                        } else SettingsScreen(
                             shopName = db.shopName(),
                             biometricEnabled = prefs.getBoolean("biometric_enabled", false),
                             apiKeyCount = apiKeyCount(),
