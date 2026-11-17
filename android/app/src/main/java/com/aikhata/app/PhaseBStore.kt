@@ -360,7 +360,7 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
                 val date = item.optString("date")
                 require(id > 0 && entryIds.add(id) && supplierIds.contains(supplierId) &&
                     item.optString("type") in listOf("payable", "payment") &&
-                    Regex("^\\\\d{4}-\\\\d{2}-\\\\d{2}$").matches(date) &&
+                    Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(date) &&
                     amount > 0 && amount <= 900000000000000L &&
                     item.optString("description").length <= 250
                 ) { "A supplier entry backup record is invalid." }
