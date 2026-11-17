@@ -1405,7 +1405,6 @@ class MainActivity : FragmentActivity() {
                 Thread {
                     var socket: android.bluetooth.BluetoothSocket? = null
                     try {
-                        adapter.cancelDiscovery()
                         socket = device.createRfcommSocketToServiceRecord(
                             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
                         )
