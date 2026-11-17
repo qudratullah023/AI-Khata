@@ -65,11 +65,11 @@ fun FuturisticBackdrop(
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = if (style == STYLE_NEUMORPHISM) 0.018f else 0.035f)
     Box(
         modifier = modifier.fillMaxSize().background(
-            if (style == STYLE_NEUMORPHISM) MaterialTheme.colorScheme.background
-            else Brush.linearGradient(
+            Brush.linearGradient(
                 listOf(
                     MaterialTheme.colorScheme.background,
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                    if (style == STYLE_NEUMORPHISM) MaterialTheme.colorScheme.background
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                     MaterialTheme.colorScheme.background
                 )
             )
