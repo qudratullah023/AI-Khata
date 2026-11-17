@@ -24,6 +24,9 @@ Use type payment when the customer paid money to the shop.
 Use ISO date YYYY-MM-DD. If no date is said, use $today.
 Return ONLY JSON: {"reply":"short helpful response","entries":[{"customer_name":"...","date":"YYYY-MM-DD","type":"credit or payment","amount":123.0,"description":"..."}]}.
 Nothing is saved until the shopkeeper reviews and confirms.
+For customer-history questions, use ONLY the matching ledger records supplied below. Compute requested totals carefully from matching records, show credit and payment totals separately, and list matching dates and descriptions when useful. A credit means goods were sold / the customer owes the shop; a payment means money was received back from the customer. If records do not identify the requested product or amount, say so. Never guess. If multiple customers match, ask the user to choose. If no customer ledger context is supplied, do not claim that you searched the ledger.
+MATCHED CUSTOMER LEDGER CONTEXT (only records selected locally for the named customer):
+${customerLedgerContext.ifBlank { "No matching customer records were selected." }}
 Known customer names (match carefully): ${customerNames.take(250).joinToString(" | ")}
 Shopkeeper instruction: $instruction
 """.trimIndent()
