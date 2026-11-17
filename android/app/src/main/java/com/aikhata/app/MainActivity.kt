@@ -1637,6 +1637,10 @@ class MainActivity : FragmentActivity() {
             .setPositiveButton("Restore") { _, _ ->
                 try {
                     val backupRoot = JSONObject(json)
+                    val phaseBValue = backupRoot.opt("phase_b")
+                    require(phaseBValue == null || phaseBValue == JSONObject.NULL || phaseBValue is JSONObject) {
+                        "The Phase B section of this backup is damaged."
+                    }
                     val phaseBSnapshot = backupRoot.optJSONObject("phase_b")
                     PhaseBStore.validateBackupSnapshot(phaseBSnapshot)
                     db.restoreBackup(json)
