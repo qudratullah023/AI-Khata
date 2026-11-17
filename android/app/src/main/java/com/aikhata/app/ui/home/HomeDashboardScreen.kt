@@ -100,6 +100,11 @@ fun HomeDashboardScreen(
                             Text("Your business, in sync.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                         OutlinedButton(
+                            onClick = onSettings,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text("⚙", fontSize = 17.sp) }
+                        Spacer(Modifier.width(6.dp))
+                        OutlinedButton(
                             onClick = onLock,
                             contentPadding = PaddingValues(horizontal = 13.dp, vertical = 8.dp)
                         ) { Text("LOCK", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
@@ -208,26 +213,24 @@ fun HomeDashboardScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
-                                        Eyebrow("Control centre")
-                                        Text("Quick actions", style = MaterialTheme.typography.titleLarge)
-                                    }
-                                    GlowPill("READY")
+                                        Eyebrow("Workspace")
+                                Text("Quick actions", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "The tools you use most, all in one place.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ActionCard("Customers", "01", "View all accounts", Modifier.weight(1f), onCustomers, true)
+                                    ActionCard("New customer", "+", "Open a new khata", Modifier.weight(1f), onAddCustomer)
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("Customers", "01", "Manage accounts", Modifier.weight(1f), onCustomers, true)
-                                    ActionCard("New customer", "+", "Create a khata", Modifier.weight(1f), onAddCustomer)
+                                    ActionCard("Reports", "↗", "Sales & balances", Modifier.weight(1f), onReports)
+                                    ActionCard("Scan ledger", "◎", "Import a page photo", Modifier.weight(1f), onScan)
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("Reports", "↗", "Track performance", Modifier.weight(1f), onReports)
-                                    ActionCard("Scan ledger", "◎", "Read a photo", Modifier.weight(1f), onScan)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("AI Bookkeeper", "✦", "Talk to your accounts", Modifier.weight(1f), onAssistant, true)
-                                    ActionCard("Business", "▦", "Stock & expenses", Modifier.weight(1f), onBusiness)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("Settings", "⚙", "Shop preferences", Modifier.weight(1f), onSettings)
-                                    ActionCard("Scan ledger", "◎", "Read handwritten pages", Modifier.weight(1f), onScan)
+                                    ActionCard("AI Bookkeeper", "✦", "Ask about your accounts", Modifier.weight(1f), onAssistant, true)
+                                    ActionCard("Inventory & costs", "▦", "Products and expenses", Modifier.weight(1f), onBusiness)
                                 }
                             }
                         }
@@ -297,23 +300,13 @@ fun HomeDashboardScreen(
                     }
 
                     item {
-                        ScreenEntrance(delayMillis = 300) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedButton(onClick = onSettings, modifier = Modifier.weight(1f)) {
-                                    Text("Settings")
-                                }
-                                OutlinedButton(onClick = onBackup, modifier = Modifier.weight(1f)) {
-                                    Text("Create backup")
-                                }
-                            }
-                            Text(
-                                "AI KHATA  •  SECURE LOCAL LEDGER",
-                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                fontSize = 9.sp,
-                                letterSpacing = 1.4.sp
-                            )
-                        }
+                        Text(
+                            "AI KHATA  •  YOUR BUSINESS AT A GLANCE",
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            fontSize = 9.sp,
+                            letterSpacing = 1.2.sp
+                        )
                     }
                 }
             }
