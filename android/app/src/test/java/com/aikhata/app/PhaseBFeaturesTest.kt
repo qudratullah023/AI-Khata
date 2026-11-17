@@ -46,6 +46,24 @@ class PhaseBFeaturesTest {
     }
 
     @Test
+    fun mergingCustomersCombinesTagsAndNotesButDoesNotTransferSharingConsent() {
+        val store = PhaseBStore(context, "phase_b_merge_meta_test")
+        try {
+            store.saveCustomerMeta(CustomerMeta(1L, "Neighbour, wholesale", "Target note", false))
+            store.saveCustomerMeta(CustomerMeta(2L, "Wholesale, relative", "Source note", true))
+            store.mergeCustomerMeta(2L, 1L)
+            val merged = store.customerMeta(1L)
+            assertEquals("Neighbour, wholesale, relative", merged.tags)
+            assertEquals("Target note\n\nSource note", merged.notes)
+            assertFalse(merged.shareOptIn)
+            assertEquals("", store.customerMeta(2L).tags)
+        } finally {
+            store.close()
+            context.deleteDatabase("ai_khata_phase_b_phase_b_merge_meta_test.db")
+        }
+    }
+
+    @Test
     fun supplierPayablesIncreaseBalanceAndPaymentsReduceIt() {
         val store = PhaseBStore(context, "phase_b_supplier_test")
         try {
