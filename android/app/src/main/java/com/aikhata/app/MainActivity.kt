@@ -1039,7 +1039,8 @@ class MainActivity : FragmentActivity() {
                     .setPositiveButton("Merge accounts") { _, _ ->
                         try {
                             db.mergeCustomers(source.id, target.id)
-                            toast("Customer accounts merged. All entries were kept.")
+                            phaseB.mergeCustomerMeta(source.id, target.id)
+                            toast("Customer accounts merged. All entries and customer notes were kept.")
                             showCustomer(target.id)
                         } catch (error: Exception) {
                             toast("The accounts could not be merged: " + error.message)
@@ -1640,6 +1641,7 @@ class MainActivity : FragmentActivity() {
                     PhaseBStore.validateBackupSnapshot(phaseBSnapshot)
                     db.restoreBackup(json)
                     phaseB.restoreBackupSnapshot(phaseBSnapshot)
+                    ShopRegistry.updateActiveName(this, db.shopName())
                     schedulePhaseBNotifications(this, phaseB)
                     toast("Your backup has been restored.")
                     showHome()
