@@ -81,6 +81,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { SettingsSectionLabel("PERSONALIZATION") }
             item {
                 ScreenEntrance(delayMillis = 35) {
                     SettingsCard(
@@ -115,6 +116,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { SettingsSectionLabel("BUSINESS PROFILE") }
             item {
                 ScreenEntrance(delayMillis = 60) {
                     SettingsCard("Shop identity", "Your business name appears on the dashboard and shared statements.") {
@@ -133,6 +135,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { SettingsSectionLabel("SECURITY & ACCESS") }
             item {
                 ScreenEntrance(delayMillis = 110) {
                     SettingsCard("Access security", "Change your private shop PIN. Keep it somewhere safe.") {
@@ -182,11 +185,12 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { SettingsSectionLabel("AI SERVICES") }
             item {
                 ScreenEntrance(delayMillis = 210) {
                     SettingsCard(
-                        "AI vision keys",
-                        "Personal Gemini keys are optional. The selected ledger photo is sent only when you start a scan."
+                        "AI & integrations",
+                        "Add Gemini API keys for AI Bookkeeper and ledger-photo reading. Your key stays on this phone; data is sent only when you request an AI action."
                     ) {
                         GlowPill(if (apiKeyCount > 0) "$apiKeyCount ENCRYPTED KEY(S)" else "NO PERSONAL KEYS")
                         OutlinedTextField(
@@ -223,10 +227,11 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { SettingsSectionLabel("DATA & BACKUP") }
             item {
                 ScreenEntrance(delayMillis = 260) {
                     SettingsCard(
-                        "Data vault",
+                        "Backup & restore",
                         "Move your encrypted shop data between phones using Google Drive or any file provider. Choose Google Drive in the Android save/open screen. Sign in to the same Google account on both phones and use the same backup password. This is a secure manual backup/restore, not automatic live sync."
                     ) {
                         Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) {
