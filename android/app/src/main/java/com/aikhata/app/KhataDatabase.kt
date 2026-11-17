@@ -571,7 +571,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
     /** Amounts belonging to transactions dated on the selected local day. */
     fun dailySummary(date: String): Triple<Double, Double, Double> {
         require(Regex("^\\\\d{4}-\\\\d{2}-\\\\d{2}$").matches(date))
-        return readableDatabase.rawQuery(
+        require(Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(date))
             """SELECT
                 COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount_paisa ELSE 0 END),0),
                 COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount_paisa ELSE 0 END),0)
