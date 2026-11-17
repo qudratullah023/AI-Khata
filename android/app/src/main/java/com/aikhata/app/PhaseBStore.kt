@@ -207,6 +207,174 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
         return overdueSuppliers to (overduePaisa / 100.0)
     }
 
+
+    /**
+     * Include Phase B records in the encrypted shop backup. Customer IDs are preserved
+     * by the main ledger backup so customer tags and sharing permissions reconnect safely.
+     */
+    fun exportBackupSnapshot(): org.json.JSONObject {
+        val root = org.json.JSONObject()
+        val metadata = org.json.JSONArray()
+        readableDatabase.rawQuery(
+            "SELECT customer_id,tags,notes,share_opt_in FROM customer_meta ORDER BY customer_id",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                metadata.put(org.json.JSONObject()
+                    .put("customer_id", cursor.getLong(0))
+                    .put("tags", cursor.getString(1))
+                    .put("notes", cursor.getString(2))
+                    .put("share_opt_in", cursor.getInt(3) == 1))
+            }
+        }
+        val supplierArray = org.json.JSONArray()
+        val entryArray = org.json.JSONArray()
+        suppliers().forEach { supplier ->
+            supplierArray.put(org.json.JSONObject()
+                .put("id", supplier.id)
+                .put("name", supplier.name)
+                .put("phone", supplier.phone))
+            supplierEntries(supplier.id).forEach { entry ->
+                entryArray.put(org.json.JSONObject()
+                    .put("id", entry.id)
+                    .put("supplier_id", supplier.id)
+                    .put("date", entry.date)
+                    .put("type", entry.type)
+                    .put("description", entry.description)
+                    .put("amount_paisa", Math.round(entry.amount * 100.0)))
+            }
+        }
+        val settings = org.json.JSONObject()
+        readableDatabase.rawQuery("SELECT setting_key,setting_value FROM settings ORDER BY setting_key", null).use { cursor ->
+            while (cursor.moveToNext()) settings.put(cursor.getString(0), cursor.getString(1))
+        }
+        root.put("customer_meta", metadata)
+        root.put("suppliers", supplierArray)
+        root.put("supplier_entries", entryArray)
+        root.put("settings", settings)
+        return root
+    }
+
+    fun restoreBackupSnapshot(snapshot: org.json.JSONObject?) {
+        validateBackupSnapshot(snapshot)
+        val source = snapshot ?: org.json.JSONObject()
+        val metadata = source.optJSONArray("customer_meta") ?: org.json.JSONArray()
+        val supplierArray = source.optJSONArray("suppliers") ?: org.json.JSONArray()
+        val entryArray = source.optJSONArray("supplier_entries") ?: org.json.JSONArray()
+        val settings = source.optJSONObject("settings") ?: org.json.JSONObject()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("supplier_entries", null, null)
+            db.delete("suppliers", null, null)
+            db.delete("customer_meta", null, null)
+            db.delete("settings", null, null)
+            for (index in 0 until supplierArray.length()) {
+                val item = supplierArray.getJSONObject(index)
+                val values = ContentValues().apply {
+                    put("id", item.getLong("id"))
+                    put("name", item.getString("name").trim().take(100))
+                    put("phone", item.optString("phone").take(40))
+                    put("created_at", now())
+                }
+                db.insertOrThrow("suppliers", null, values)
+            }
+            for (index in 0 until entryArray.length()) {
+                val item = entryArray.getJSONObject(index)
+                val values = ContentValues().apply {
+                    put("id", item.getLong("id"))
+                    put("supplier_id", item.getLong("supplier_id"))
+                    put("entry_date", item.getString("date"))
+                    put("entry_type", item.getString("type"))
+                    put("description", item.optString("description").take(250))
+                    put("amount_paisa", item.getLong("amount_paisa"))
+                    put("created_at", now())
+                }
+                db.insertOrThrow("supplier_entries", null, values)
+            }
+            for (index in 0 until metadata.length()) {
+                val item = metadata.getJSONObject(index)
+                val values = ContentValues().apply {
+                    put("customer_id", item.getLong("customer_id"))
+                    put("tags", item.optString("tags").take(240))
+                    put("notes", item.optString("notes").take(2000))
+                    put("share_opt_in", if (item.optBoolean("share_opt_in")) 1 else 0)
+                }
+                db.insertOrThrow("customer_meta", null, values)
+            }
+            val keys = settings.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val values = ContentValues().apply {
+                    put("setting_key", key.take(100))
+                    put("setting_value", settings.optString(key).take(4096))
+                }
+                db.insertOrThrow("settings", null, values)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    companion object {
+        fun validateBackupSnapshot(snapshot: org.json.JSONObject?) {
+            if (snapshot == null) return
+            fun array(name: String): org.json.JSONArray {
+                val value = snapshot.opt(name)
+                require(value == null || value == org.json.JSONObject.NULL || value is org.json.JSONArray) {
+                    "The Phase B $name backup section is damaged."
+                }
+                return snapshot.optJSONArray(name) ?: org.json.JSONArray()
+            }
+            val metadata = array("customer_meta")
+            val suppliers = array("suppliers")
+            val entries = array("supplier_entries")
+            val settings = snapshot.optJSONObject("settings") ?: org.json.JSONObject()
+            require(settings.length() <= 100) { "The Phase B settings backup is too large." }
+            val customerIds = mutableSetOf<Long>()
+            for (index in 0 until metadata.length()) {
+                val item = metadata.optJSONObject(index)
+                    ?: throw IllegalArgumentException("A customer profile backup record is damaged.")
+                val id = item.optLong("customer_id", -1L)
+                require(id > 0 && customerIds.add(id) &&
+                    item.optString("tags").length <= 240 && item.optString("notes").length <= 2000
+                ) { "A customer profile backup record is invalid." }
+            }
+            val supplierIds = mutableSetOf<Long>()
+            for (index in 0 until suppliers.length()) {
+                val item = suppliers.optJSONObject(index)
+                    ?: throw IllegalArgumentException("A supplier backup record is damaged.")
+                val id = item.optLong("id", -1L)
+                require(id > 0 && supplierIds.add(id) && item.optString("name").isNotBlank() &&
+                    item.optString("name").length <= 100 && item.optString("phone").length <= 40
+                ) { "A supplier backup record is invalid." }
+            }
+            val entryIds = mutableSetOf<Long>()
+            for (index in 0 until entries.length()) {
+                val item = entries.optJSONObject(index)
+                    ?: throw IllegalArgumentException("A supplier entry backup record is damaged.")
+                val id = item.optLong("id", -1L)
+                val supplierId = item.optLong("supplier_id", -1L)
+                val amount = item.optLong("amount_paisa", -1L)
+                val date = item.optString("date")
+                require(id > 0 && entryIds.add(id) && supplierIds.contains(supplierId) &&
+                    item.optString("type") in listOf("payable", "payment") &&
+                    Regex("^\\\\d{4}-\\\\d{2}-\\\\d{2}$").matches(date) &&
+                    amount > 0 && amount <= 900000000000000L &&
+                    item.optString("description").length <= 250
+                ) { "A supplier entry backup record is invalid." }
+            }
+            val settingKeys = settings.keys()
+            while (settingKeys.hasNext()) {
+                val key = settingKeys.next()
+                require(key.isNotBlank() && key.length <= 100 && settings.optString(key).length <= 4096) {
+                    "A Phase B setting in this backup is invalid."
+                }
+            }
+        }
+    }
+
     private fun now() = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date())
     private fun today() = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
     private fun derive(pin: String, salt: ByteArray): ByteArray {
