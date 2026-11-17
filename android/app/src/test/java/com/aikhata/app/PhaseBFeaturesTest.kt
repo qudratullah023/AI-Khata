@@ -74,10 +74,34 @@ class PhaseBFeaturesTest {
 
             val summary = store.overdueSupplierSummary("2026-10-18")
             assertEquals(1, summary.first)
-            assertEquals(1000.0, summary.second, 0.001)
+            assertEquals(500.0, summary.second, 0.001)
         } finally {
             store.close()
             context.deleteDatabase("ai_khata_phase_b_phase_b_overdue_test.db")
+        }
+    }
+
+    @Test
+    fun advancePaymentsOffsetLaterCustomerAndSupplierCredits() {
+        val name = "phase_b_advance_test.db"
+        context.deleteDatabase(name)
+        val db = KhataDatabase(context, name)
+        val store = PhaseBStore(context, "phase_b_advance_test")
+        try {
+            val customerId = db.addCustomer("Hina", "03005550777")
+            db.addTransaction(customerId, "payment", 1000.0, "Advance", "2026-10-01")
+            db.addTransaction(customerId, "credit", 1000.0, "Later purchase", "2026-11-01")
+            assertEquals(0, db.overdueCustomerSummary("2026-10-18").first)
+
+            val supplierId = store.addSupplier("Prepaid supplier", "")
+            store.addSupplierEntry(supplierId, "payment", 1000.0, "Advance", "2026-10-01")
+            store.addSupplierEntry(supplierId, "payable", 1000.0, "Later stock", "2026-11-01")
+            assertEquals(0, store.overdueSupplierSummary("2026-10-18").first)
+        } finally {
+            db.close()
+            store.close()
+            context.deleteDatabase(name)
+            context.deleteDatabase("ai_khata_phase_b_phase_b_advance_test.db")
         }
     }
 
