@@ -175,10 +175,14 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
         var overduePaisa = 0L
         suppliers().forEach { supplier ->
             val outstanding = ArrayList<Pair<String, Long>>()
+            var supplierAdvancePaisa = 0L
             supplierEntries(supplier.id).asReversed().forEach { entry ->
                 val entryPaisa = Math.round(entry.amount * 100.0)
                 if (entry.type == "payable") {
-                    outstanding.add(entry.date to entryPaisa)
+                    val advanceUsed = minOf(supplierAdvancePaisa, entryPaisa)
+                    supplierAdvancePaisa -= advanceUsed
+                    val remainingPayable = entryPaisa - advanceUsed
+                    if (remainingPayable > 0L) outstanding.add(entry.date to remainingPayable)
                 } else {
                     var remaining = entryPaisa
                     var index = 0
@@ -189,6 +193,7 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
                         remaining -= applied
                         index++
                     }
+                    supplierAdvancePaisa += remaining
                 }
             }
             val overdueForSupplier = outstanding
