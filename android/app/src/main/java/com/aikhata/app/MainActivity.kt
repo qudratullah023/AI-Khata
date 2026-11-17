@@ -36,6 +36,7 @@ import com.canhub.cropper.CropImageView.RequestSizeOptions
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.material3.Text
 import android.content.res.Configuration
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
