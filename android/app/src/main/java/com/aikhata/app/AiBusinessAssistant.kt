@@ -62,7 +62,7 @@ Shopkeeper instruction: $instruction
                     val end = answer.lastIndexOf('}')
                     require(start >= 0 && end > start) { "AI returned an unreadable response." }
                     val result = JSONObject(answer.substring(start, end + 1))
-                    val entries = result.optJSONArray("entries") ?: JSONArray()
+                    val entries = if (isReadOnlyQuestion(instruction)) JSONArray() else (result.optJSONArray("entries") ?: JSONArray())
                     validateEntries(entries)
                     return AssistantDraft(
                         result.optString("reply").ifBlank {
@@ -78,6 +78,12 @@ Shopkeeper instruction: $instruction
             }
         }
         throw IllegalStateException("The AI assistant could not prepare a draft. " + failures.takeLast(2).joinToString("; "))
+    }
+
+    private fun isReadOnlyQuestion(instruction: String): Boolean {
+        val text = instruction.trim().lowercase(java.util.Locale.ROOT)
+        return Regex("^(please\\s+)?(search|find|look up|show|tell me|how much|how many|what|when|where|did|has|have|which|list|calculate|summarize|check|batao|kitna|kitne|kitni|kab|kya|hisaab|hisab|dikhao)\\b")
+            .containsMatchIn(text)
     }
 
     private fun validateEntries(entries: JSONArray) {
