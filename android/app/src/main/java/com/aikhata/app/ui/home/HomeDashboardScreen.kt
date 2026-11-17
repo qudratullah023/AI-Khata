@@ -101,10 +101,12 @@ fun HomeDashboardScreen(
                             )
                             Text(if (isStaff) "Staff session · Sales entry only" else "Your business, in sync.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
-                        OutlinedButton(
-                            onClick = onSettings,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) { Text("⚙", fontSize = 17.sp) }
+                        if (!isStaff) {
+                            OutlinedButton(
+                                onClick = onSettings,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) { Text("⚙", fontSize = 17.sp) }
+                        }
                         Spacer(Modifier.width(6.dp))
                         OutlinedButton(
                             onClick = onLock,
