@@ -56,6 +56,8 @@ fun HomeDashboardScreen(
     onAddCustomer: () -> Unit,
     onReports: () -> Unit,
     onBusiness: () -> Unit,
+    onPhaseB: () -> Unit,
+    isStaff: Boolean,
     onScan: () -> Unit,
     onAssistant: () -> Unit,
     onSettings: () -> Unit,
@@ -97,7 +99,7 @@ fun HomeDashboardScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Text("Your business, in sync.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                            Text(if (isStaff) "Staff session · Sales entry only" else "Your business, in sync.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                         OutlinedButton(
                             onClick = onSettings,
@@ -224,13 +226,21 @@ fun HomeDashboardScreen(
                                     ActionCard("Customers", "01", "View all accounts", Modifier.weight(1f), onCustomers, true)
                                     ActionCard("New customer", "+", "Open a new khata", Modifier.weight(1f), onAddCustomer)
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("Reports", "↗", "Sales & balances", Modifier.weight(1f), onReports)
-                                    ActionCard("Scan ledger", "◎", "Import a page photo", Modifier.weight(1f), onScan)
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    ActionCard("AI Bookkeeper", "✦", "Ask about your accounts", Modifier.weight(1f), onAssistant, true)
-                                    ActionCard("Inventory & costs", "▦", "Products and expenses", Modifier.weight(1f), onBusiness)
+                                if (!isStaff) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        ActionCard("Reports", "↗", "Sales & balances", Modifier.weight(1f), onReports)
+                                        ActionCard("Scan ledger", "◎", "Import a page photo", Modifier.weight(1f), onScan)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        ActionCard("AI Bookkeeper", "✦", "Ask about your accounts", Modifier.weight(1f), onAssistant, true)
+                                        ActionCard("Inventory & costs", "▦", "Products and expenses", Modifier.weight(1f), onBusiness)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        ActionCard("Business tools", "✧", "Search, suppliers, reminders & shops", Modifier.weight(1f), onPhaseB, true)
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                } else {
+                                    Text("Staff permissions are limited. Profit, settings, deletion and shop management are unavailable in this session.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                                 }
                             }
                         }
