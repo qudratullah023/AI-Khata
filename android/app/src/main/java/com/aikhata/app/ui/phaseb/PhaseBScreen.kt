@@ -37,6 +37,7 @@ fun PhaseBScreen(
     onOpenCustomer: (Long) -> Unit,
     onShareStatement: (Long) -> Unit,
     onPrintStatement: (Long) -> Unit,
+    onPrintReceipt: (Long) -> Unit,
     onSwitchShop: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -405,8 +406,11 @@ fun PhaseBScreen(
                                         }
                                     }
                                 }
+                                OutlinedButton(onClick = { if (selectedCustomerId > 0) onPrintReceipt(selectedCustomerId) }, modifier = Modifier.fillMaxWidth(), enabled = selectedCustomerId > 0) {
+                                    Text("Print latest receipt")
+                                }
                                 OutlinedButton(onClick = { if (selectedCustomerId > 0) onPrintStatement(selectedCustomerId) }, modifier = Modifier.fillMaxWidth(), enabled = selectedCustomerId > 0) {
-                                    Text("Print by Bluetooth")
+                                    Text("Print full statement")
                                 }
                             }
                         }
