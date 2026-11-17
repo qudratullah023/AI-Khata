@@ -268,7 +268,7 @@ fun PhaseBScreen(
                                             saveSupplierEntry(store, supplier.id, "payment", supplierAmount, supplierDescription, scope, { reloadSuppliers(); supplierAmount = ""; supplierDescription = ""; message = "Supplier payment recorded." }, { message = it })
                                         }, modifier = Modifier.weight(1f), enabled = supplierAmount.toDoubleOrNull()?.let { it > 0 } == true) { Text("Record payment") }
                                     }
-                                    val entries = remember(supplier.id) { store.supplierEntries(supplier.id) }
+                                    val entries = store.supplierEntries(supplier.id)
                                     entries.forEach { entry ->
                                         Text("${entry.date} · ${if (entry.type == "payable") "Payable" else "Payment"} · Rs. ${String.format(java.util.Locale.US, "%,.2f", entry.amount)}${if (entry.description.isBlank()) "" else " · " + entry.description}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
@@ -303,7 +303,7 @@ fun PhaseBScreen(
                                 }
                                 OutlinedTextField(value = closingTime, onValueChange = { closingTime = it.take(5) }, modifier = Modifier.fillMaxWidth(), label = { Text("Daily closing time (HH:mm)") }, singleLine = true)
                                 Button(onClick = {
-                                    if (weeklyDay.toIntOrNull() !in 1..7 || !validTime(weeklyTime) || !validTime(closingTime)) {
+                                    if (weeklyDay.toIntOrNull()?.let { it in 1..7 } != true || !validTime(weeklyTime) || !validTime(closingTime)) {
                                         message = "Enter a day from 1 to 7 and times in 24-hour HH:mm format."
                                     } else {
                                         store.putSetting("weekly_reminder_enabled", if (weeklyEnabled) "1" else "0")
