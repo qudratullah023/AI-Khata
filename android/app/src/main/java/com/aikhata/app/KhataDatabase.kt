@@ -231,6 +231,9 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
 
         val db = writableDatabase
         if (productId == null) {
+            require(!hasSaleSnapshot) {
+                "Product sale details require a valid product."
+            }
             val values = ContentValues().apply {
                 put("customer_id", id)
                 put("transaction_date", date)
@@ -281,6 +284,7 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
     }
     fun updateTransaction(id: Long, amount: Double, description: String, date: String) {
         require(amount > 0 && amount.isFinite())
+        require(LedgerMath.isValidDate(date)) { "Enter a valid transaction date." }
         val values = ContentValues().apply {
             put("amount_paisa", toPaisa(amount))
             put("description", description.trim())
