@@ -60,7 +60,7 @@ jobs:
           printf '%s' "$AI_KHATA_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ai-khata-release.jks"
           echo "AI_KHATA_RELEASE_STORE_FILE=$RUNNER_TEMP/ai-khata-release.jks" >> "$GITHUB_ENV"
       - name: Build debug APK
-        run: gradle -p android testDebugUnitTest assembleDebug assembleRelease --stacktrace
+        run: gradle -p android -Drobolectric.dependency.repo.id=mavenCentral -Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2 testDebugUnitTest assembleDebug assembleRelease --stacktrace
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

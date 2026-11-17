@@ -33,6 +33,9 @@ import com.aikhata.app.ui.components.FuturisticBackdrop
 import com.aikhata.app.ui.components.GlowPill
 import com.aikhata.app.ui.components.NeonPanel
 import com.aikhata.app.ui.components.ScreenEntrance
+import com.aikhata.app.ui.theme.STYLE_NEUMORPHISM
+import com.aikhata.app.ui.theme.STYLE_GLASSMORPHISM
+import com.aikhata.app.ui.theme.STYLE_LIQUID_GLASS
 
 @Composable
 fun SettingsScreen(
@@ -40,6 +43,8 @@ fun SettingsScreen(
     biometricEnabled: Boolean,
     apiKeyCount: Int,
     appVersion: String,
+    selectedUiStyle: String,
+    onUiStyleSelected: (String) -> Unit,
     onBack: () -> Unit,
     onSaveShopName: (String) -> Unit,
     onChangePin: (String, String) -> Unit,
@@ -72,6 +77,31 @@ fun SettingsScreen(
                             Text("Settings", style = MaterialTheme.typography.headlineMedium)
                         }
                         GlowPill("PROTECTED")
+                    }
+                }
+            }
+            item {
+                ScreenEntrance(delayMillis = 35) {
+                    SettingsCard(
+                        "Appearance studio",
+                        "Switch the entire app instantly. Each style has its own surfaces, depth, colors and lighting."
+                    ) {
+                        val styles = listOf(
+                            STYLE_NEUMORPHISM to ("Soft UI" to "Gentle raised surfaces"),
+                            STYLE_GLASSMORPHISM to ("Glassmorphism" to "Frosted translucent panels"),
+                            STYLE_LIQUID_GLASS to ("Liquid Glass" to "Iridescent fluid surfaces")
+                        )
+                        styles.forEach { (key, label) ->
+                            if (selectedUiStyle == key) {
+                                Button(onClick = { onUiStyleSelected(key) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("✓  ${label.first}  ·  ${label.second}")
+                                }
+                            } else {
+                                OutlinedButton(onClick = { onUiStyleSelected(key) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("${label.first}  ·  ${label.second}")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -187,13 +217,13 @@ fun SettingsScreen(
                 ScreenEntrance(delayMillis = 260) {
                     SettingsCard(
                         "Data vault",
-                        "Export a backup before changing phones or uninstalling. Backup files contain customer records and should be kept private."
+                        "Move your encrypted shop data between phones using Google Drive or any file provider. Choose Google Drive in the Android save/open screen. Sign in to the same Google account on both phones and use the same backup password. This is a secure manual backup/restore, not automatic live sync."
                     ) {
                         Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) {
-                            Text("Export backup")
+                            Text("Save encrypted backup · Google Drive / phone")
                         }
                         OutlinedButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth()) {
-                            Text("Restore from backup")
+                            Text("Restore · Google Drive / phone")
                         }
                     }
                 }

@@ -41,6 +41,9 @@ import androidx.compose.animation.core.tween
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import com.aikhata.app.data.KhataRepository
 import com.aikhata.app.ui.home.HomeDashboardScreen
 import com.aikhata.app.ui.business.BusinessManagementScreen
@@ -62,7 +65,9 @@ import com.aikhata.app.ui.reports.ReportsScreen
 import com.aikhata.app.ui.reports.ReportsViewModel
 import com.aikhata.app.ui.reports.ReportsViewModelFactory
 import com.aikhata.app.ui.settings.SettingsScreen
+import com.aikhata.app.ui.assistant.AssistantScreen
 import com.aikhata.app.ui.theme.AiKhataTheme
+import com.aikhata.app.ui.theme.STYLE_LIQUID_GLASS
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -638,11 +643,15 @@ class MainActivity : FragmentActivity() {
                         route.startsWith("reports/") -> "reports"
                         route == "settings" -> "settings"
                         route == "business" -> "business"
+                        route == "assistant" -> "assistant"
                         else -> "home"
                     }
                 }
             }
-            AiKhataTheme {
+            var uiStyle by remember {
+                mutableStateOf(prefs.getString("ui_style", STYLE_LIQUID_GLASS) ?: STYLE_LIQUID_GLASS)
+            }
+            AiKhataTheme(style = uiStyle) {
                 NavHost(
                     navController = navController,
                     startDestination = startRoute,
@@ -684,6 +693,7 @@ class MainActivity : FragmentActivity() {
                             onReports = { navController.navigate("reports/" + today().take(7)) },
                             onBusiness = { navController.navigate("business") },
                             onScan = { chooseImage() },
+                            onAssistant = { navController.navigate("assistant") },
                             onSettings = { navController.navigate("settings") },
                             onLock = {
                                 composeNavController = null
@@ -695,6 +705,31 @@ class MainActivity : FragmentActivity() {
                             waitingPhotoCount = waitingPhotos,
                             onCustomerClick = { navController.navigate("customer/" + it) },
                             onRefresh = { homeViewModel.refresh() }
+                        )
+                    }
+                    composable("assistant") {
+                        AssistantScreen(
+                            customers = db.customers().take(80),
+                            onBack = { if (!navController.popBackStack()) showHome() },
+                            onCustomerSelected = { navController.navigate("customer/" + it) },
+                            onSettings = { navController.navigate("settings") },
+                            onSend = { instruction, complete ->
+                                Thread {
+                                    try {
+                                        val (matchedNames, ledgerContext) = buildAssistantLedgerContext(instruction)
+                                        val draft = AiBusinessAssistant().interpret(
+                                            instruction,
+                                            matchedNames,
+                                            apiKeys(),
+                                            ledgerContext
+                                        )
+                                        runOnUiThread { complete(Result.success(draft)) }
+                                    } catch (error: Exception) {
+                                        runOnUiThread { complete(Result.failure(error)) }
+                                    }
+                                }.start()
+                            },
+                            onConfirmDraft = { entries -> reviewAiEntries(entries) }
                         )
                     }
                     composable("customers") {
@@ -746,6 +781,11 @@ class MainActivity : FragmentActivity() {
                             biometricEnabled = prefs.getBoolean("biometric_enabled", false),
                             apiKeyCount = apiKeyCount(),
                             appVersion = BuildConfig.VERSION_NAME,
+                            selectedUiStyle = uiStyle,
+                            onUiStyleSelected = { selected ->
+                                uiStyle = selected
+                                prefs.edit().putString("ui_style", selected).apply()
+                            },
                             onBack = { if (!navController.popBackStack()) showHome() },
                             onSaveShopName = { value ->
                                 if (value.isNotBlank()) {
@@ -1487,6 +1527,62 @@ class MainActivity : FragmentActivity() {
             }
         }
         dialog.show()
+    }
+
+    /**
+     * Retrieves only the customer records explicitly matched by the user's question.
+     * The full customer database is never sent to the AI provider.
+     */
+    private fun buildAssistantLedgerContext(instruction: String): Pair<List<String>, String> {
+        val customers = db.customers()
+        val normalizedInstruction = normalizeCustomerName(instruction)
+        val exactMatches = customers.filter { customer ->
+            val name = normalizeCustomerName(customer.name)
+            name.length >= 2 && Regex("(^| )" + Regex.escape(name) + "( |$)").containsMatchIn(normalizedInstruction)
+        }
+        val tokenMatches = if (exactMatches.isNotEmpty()) emptyList() else {
+            val tokens = normalizedInstruction.split(" ").filter { it.length >= 4 }.toSet()
+            customers.filter { customer ->
+                normalizeCustomerName(customer.name).split(" ").any { namePart ->
+                    tokens.any { token ->
+                        token == namePart || (minOf(token.length, namePart.length) >= 4 &&
+                            customerNameSimilarity(token, namePart) >= 0.82)
+                    }
+                }
+            }
+        }
+        val matched = (exactMatches + tokenMatches).distinctBy { it.id }.take(3)
+        if (matched.isEmpty()) {
+            return emptyList<String>() to
+                "No customer record was matched locally. Do not guess or invent a customer. Ask the shopkeeper to clarify the exact customer name."
+        }
+
+        val products = db.products().associateBy { it.id }
+        val sections = matched.map { customer ->
+            val history = db.transactions(customer.id)
+            val totalCredit = history.filter { it.type == "credit" }.sumOf { it.amount }
+            val totalPayments = history.filter { it.type == "payment" }.sumOf { it.amount }
+            val rows = history.take(120).map { tx ->
+                val linkedProduct = tx.productId?.let { products[it]?.name }
+                val detail = listOfNotNull(
+                    tx.description.takeIf { it.isNotBlank() },
+                    linkedProduct?.let { "product: $it" },
+                    tx.quantity?.let { "quantity: $it" },
+                    tx.unitCost?.let { "unit cost: Rs. " + String.format(Locale.US, "%.2f", it) }
+                ).joinToString("; ")
+                "${tx.date} | ${if (tx.type == "credit") "CUSTOMER PURCHASE / CREDIT" else "CUSTOMER PAYMENT / REPAYMENT"} | Rs. " +
+                    String.format(Locale.US, "%.2f", tx.amount) + if (detail.isBlank()) "" else " | $detail"
+            }
+            """
+CUSTOMER: ${customer.name}
+TOTAL PURCHASES / CREDIT: Rs. ${String.format(Locale.US, "%.2f", totalCredit)}
+TOTAL PAYMENTS / REPAYMENTS: Rs. ${String.format(Locale.US, "%.2f", totalPayments)}
+CURRENT OUTSTANDING BALANCE: Rs. ${String.format(Locale.US, "%.2f", customer.balance)}
+TRANSACTION HISTORY (up to 120 most recent):
+${if (rows.isEmpty()) "No transactions recorded." else rows.joinToString("\n")}
+""".trimIndent()
+        }
+        return matched.map { it.name } to sections.joinToString("\n\n---\n\n")
     }
 
     private fun reviewAiEntries(entries: JSONArray, queuedFile: File? = null) {

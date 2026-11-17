@@ -47,6 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aikhata.app.ui.theme.LocalUiStyle
+import com.aikhata.app.ui.theme.STYLE_GLASSMORPHISM
+import com.aikhata.app.ui.theme.STYLE_NEUMORPHISM
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -58,48 +61,54 @@ fun FuturisticBackdrop(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.045f)
+    val style = LocalUiStyle.current
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = if (style == STYLE_NEUMORPHISM) 0.018f else 0.035f)
+    val accentA = when (style) {
+        STYLE_NEUMORPHISM -> MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
+        STYLE_GLASSMORPHISM -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
+        else -> Color(0xFF27D9B1).copy(alpha = 0.17f)
+    }
+    val accentB = if (style == STYLE_NEUMORPHISM) Color.Transparent
+        else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = modifier.fillMaxSize().background(
+            Brush.linearGradient(
+                listOf(
+                    MaterialTheme.colorScheme.background,
+                    if (style == STYLE_NEUMORPHISM) MaterialTheme.colorScheme.background
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                    MaterialTheme.colorScheme.background
+                )
+            )
+        )
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val minSide = size.minDimension
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF27D9B1).copy(alpha = 0.13f), Color.Transparent),
-                    center = Offset(size.width * 0.92f, size.height * 0.02f),
-                    radius = minSide * 0.78f
-                ),
-                radius = minSide * 0.78f,
-                center = Offset(size.width * 0.92f, size.height * 0.02f)
+                brush = Brush.radialGradient(listOf(accentA, Color.Transparent), Offset(size.width * 0.92f, size.height * 0.02f), minSide * 0.82f),
+                radius = minSide * 0.82f, center = Offset(size.width * 0.92f, size.height * 0.02f)
             )
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF5C73FF).copy(alpha = 0.10f), Color.Transparent),
-                    center = Offset(size.width * 0.02f, size.height * 0.62f),
-                    radius = minSide * 0.72f
-                ),
-                radius = minSide * 0.72f,
-                center = Offset(size.width * 0.02f, size.height * 0.62f)
+                brush = Brush.radialGradient(listOf(accentB, Color.Transparent), Offset(size.width * 0.02f, size.height * 0.72f), minSide * 0.72f),
+                radius = minSide * 0.72f, center = Offset(size.width * 0.02f, size.height * 0.72f)
             )
-            val step = 34.dp.toPx()
-            var x = 0f
-            while (x < size.width) {
-                drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.7f)
-                x += step
-            }
-            var y = 0f
-            while (y < size.height) {
-                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.7f)
-                y += step
+            if (style != STYLE_NEUMORPHISM) {
+                val step = 38.dp.toPx()
+                var x = 0f
+                while (x < size.width) {
+                    drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.6f)
+                    x += step
+                }
+                var y = 0f
+                while (y < size.height) {
+                    drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.6f)
+                    y += step
+                }
             }
         }
         content()
     }
 }
-
 @Composable
 fun ScreenEntrance(
     modifier: Modifier = Modifier,
@@ -130,30 +139,38 @@ fun NeonPanel(
     radius: Dp = 22.dp,
     content: @Composable () -> Unit
 ) {
+    val style = LocalUiStyle.current
     val shape = RoundedCornerShape(radius)
+    val borderBrush = when (style) {
+        STYLE_NEUMORPHISM -> Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.82f), MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+        )
+        STYLE_GLASSMORPHISM -> Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.62f), MaterialTheme.colorScheme.secondary.copy(alpha = 0.24f), Color.White.copy(alpha = 0.16f))
+        )
+        else -> Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.72f), MaterialTheme.colorScheme.primary.copy(alpha = 0.38f), MaterialTheme.colorScheme.secondary.copy(alpha = 0.30f))
+        )
+    }
+    val panelColor = when (style) {
+        STYLE_NEUMORPHISM -> MaterialTheme.colorScheme.surface
+        STYLE_GLASSMORPHISM -> MaterialTheme.colorScheme.surface.copy(alpha = 0.76f)
+        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+    }
     Surface(
-        modifier = modifier
-            .clip(shape)
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.34f),
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
-                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f)
-                    )
-                ),
-                shape = shape
-            ),
+        modifier = modifier.clip(shape).border(if (style == STYLE_NEUMORPHISM) 1.dp else 1.2.dp, borderBrush, shape),
         shape = shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 2.dp,
-        shadowElevation = 5.dp
+        color = panelColor,
+        tonalElevation = if (style == STYLE_NEUMORPHISM) 0.dp else 2.dp,
+        shadowElevation = when (style) {
+            STYLE_NEUMORPHISM -> 9.dp
+            STYLE_GLASSMORPHISM -> 13.dp
+            else -> 16.dp
+        }
     ) {
         content()
     }
 }
-
 @Composable
 fun GlowPill(
     label: String,
