@@ -41,6 +41,9 @@ import androidx.compose.animation.core.tween
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.aikhata.app.data.KhataRepository
 import com.aikhata.app.ui.home.HomeDashboardScreen
 import com.aikhata.app.ui.business.BusinessManagementScreen
@@ -644,7 +647,8 @@ class MainActivity : FragmentActivity() {
                     }
                 }
             }
-            AiKhataTheme {
+            var visualStyle by remember { mutableStateOf(prefs.getString("visual_style", "liquid") ?: "liquid") }
+            AiKhataTheme(visualStyle = visualStyle) {
                 NavHost(
                     navController = navController,
                     startDestination = startRoute,
@@ -702,7 +706,12 @@ class MainActivity : FragmentActivity() {
                     }
                     composable("assistant") {
                         AssistantScreen(
-                            customers = db.customers().take(80),
+                            customers = db.customers().take(250),
+                            visualStyle = visualStyle,
+                            onVisualStyleChange = { selected ->
+                                visualStyle = selected
+                                prefs.edit().putString("visual_style", selected).apply()
+                            },
                             onBack = { if (!navController.popBackStack()) showHome() },
                             onCustomerSelected = { navController.navigate("customer/" + it) },
                             onSettings = { navController.navigate("settings") },
@@ -712,7 +721,8 @@ class MainActivity : FragmentActivity() {
                                         val draft = AiBusinessAssistant().interpret(
                                             instruction,
                                             db.customers().map { it.name },
-                                            apiKeys()
+                                            apiKeys(),
+                                            buildAssistantCustomerContext(instruction)
                                         )
                                         runOnUiThread { complete(Result.success(draft)) }
                                     } catch (error: Exception) {
@@ -1513,6 +1523,54 @@ class MainActivity : FragmentActivity() {
             }
         }
         dialog.show()
+    }
+
+    /**
+     * Selects only customer records explicitly named in the current question.
+     * Ledger details remain in the local database; only the matched customer's
+     * transaction history is sent to the configured Gemini endpoint for this request.
+     */
+    private fun buildAssistantCustomerContext(instruction: String): String {
+        val query = instruction.lowercase(Locale.ROOT)
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        if (query.isBlank()) return ""
+        val queryTokens = query.split(Regex("\\s+")).toSet()
+        val allCustomers = db.customers()
+        val matched = allCustomers.mapNotNull { customer ->
+            val normalizedName = customer.name.lowercase(Locale.ROOT)
+                .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+            val nameTokens = normalizedName.split(Regex("\\s+")).filter { it.length >= 3 }
+            val fullMatch = normalizedName.isNotBlank() && query.contains(normalizedName)
+            val tokenMatch = nameTokens.any { it in queryTokens }
+            if (fullMatch || tokenMatch) customer to (if (fullMatch) 2 else 1) else null
+        }.sortedByDescending { it.second }.take(4)
+
+        if (matched.isEmpty()) return ""
+        val products = db.products().associateBy { it.id }
+        return buildString {
+            matched.forEach { (customer, _) ->
+                appendLine("CUSTOMER ${customer.name} (local customer ID ${customer.id})")
+                val history = db.transactions(customer.id).take(250)
+                if (history.isEmpty()) {
+                    appendLine("No transactions recorded.")
+                } else {
+                    history.forEach { tx ->
+                        val direction = if (tx.type == "credit") "CREDIT / SOLD / CUSTOMER OWES" else "PAYMENT / MONEY RECEIVED BACK"
+                        val productName = tx.productId?.let { products[it]?.name }
+                        append("- date=").append(tx.date)
+                            .append("; type=").append(direction)
+                            .append("; amount=Rs. ").append(String.format(Locale.US, "%.2f", tx.amount))
+                            .append("; description=").append(tx.description)
+                        if (!productName.isNullOrBlank()) append("; product=").append(productName)
+                        if (tx.quantity != null) append("; quantity=").append(tx.quantity)
+                        if (tx.unitCost != null) append("; unit cost=Rs. ").append(tx.unitCost)
+                        appendLine()
+                    }
+                }
+                appendLine()
+            }
+            if (matched.size > 1) appendLine("IMPORTANT: More than one local customer matched. Ask the user to choose before giving a customer-specific answer.")
+        }.take(42000)
     }
 
     private fun reviewAiEntries(entries: JSONArray, queuedFile: File? = null) {
