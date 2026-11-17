@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -40,6 +44,8 @@ fun SettingsScreen(
     biometricEnabled: Boolean,
     apiKeyCount: Int,
     appVersion: String,
+    visualStyle: String,
+    onVisualStyleChange: (String) -> Unit,
     onBack: () -> Unit,
     onSaveShopName: (String) -> Unit,
     onChangePin: (String, String) -> Unit,
@@ -72,6 +78,40 @@ fun SettingsScreen(
                             Text("Settings", style = MaterialTheme.typography.headlineMedium)
                         }
                         GlowPill("PROTECTED")
+                    }
+                }
+            }
+            item {
+                ScreenEntrance(delayMillis = 35) {
+                    SettingsCard(
+                        "App appearance",
+                        "Choose how AI Khata looks. Your selection is applied immediately across the app and saved on this phone."
+                    ) {
+                        Text(
+                            "VISUAL STYLE",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.1.sp
+                        )
+                        ThemeChoice(
+                            title = "Liquid Glass",
+                            detail = "Modern translucent layers and flowing colour.",
+                            selected = visualStyle == "liquid",
+                            onClick = { onVisualStyleChange("liquid") }
+                        )
+                        ThemeChoice(
+                            title = "Glassmorphism",
+                            detail = "Frosted-glass surfaces with soft depth.",
+                            selected = visualStyle == "glass",
+                            onClick = { onVisualStyleChange("glass") }
+                        )
+                        ThemeChoice(
+                            title = "Soft UI · Neumorphism",
+                            detail = "Gentle raised surfaces and soft shadows.",
+                            selected = visualStyle == "soft",
+                            onClick = { onVisualStyleChange("soft") }
+                        )
                     }
                 }
             }
@@ -208,6 +248,55 @@ fun SettingsScreen(
                     letterSpacing = 1.1.sp
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ThemeChoice(
+    title: String,
+    detail: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+        border = BorderStroke(
+            if (selected) 1.6.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    title,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    detail,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+            Text(
+                if (selected) "✓ SELECTED" else "CHOOSE",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            )
         }
     }
 }
