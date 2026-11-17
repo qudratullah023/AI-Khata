@@ -1,2 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources><string name="app_name">AI Khata</string></resources>
+<resources><string name="app_name">AI Khata</string>    <string name="shortcut_add_sale">Add sale</string>
+    <string name="shortcut_add_sale_long">Add a new sale to a customer khata</string>
+    <string name="shortcut_scan_page">Scan page</string>
+    <string name="shortcut_scan_page_long">Scan a handwritten khata page</string>
+</resources>
