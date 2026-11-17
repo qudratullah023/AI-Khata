@@ -63,6 +63,13 @@ fun FuturisticBackdrop(
 ) {
     val style = LocalUiStyle.current
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = if (style == STYLE_NEUMORPHISM) 0.018f else 0.035f)
+    val accentA = when (style) {
+        STYLE_NEUMORPHISM -> MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
+        STYLE_GLASSMORPHISM -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
+        else -> Color(0xFF27D9B1).copy(alpha = 0.17f)
+    }
+    val accentB = if (style == STYLE_NEUMORPHISM) Color.Transparent
+        else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)
     Box(
         modifier = modifier.fillMaxSize().background(
             Brush.linearGradient(
@@ -77,13 +84,6 @@ fun FuturisticBackdrop(
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val minSide = size.minDimension
-            val accentA = when (style) {
-                STYLE_NEUMORPHISM -> MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
-                STYLE_GLASSMORPHISM -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
-                else -> Color(0xFF27D9B1).copy(alpha = 0.17f)
-            }
-            val accentB = if (style == STYLE_NEUMORPHISM) Color.Transparent
-                else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f)
             drawCircle(
                 brush = Brush.radialGradient(listOf(accentA, Color.Transparent), Offset(size.width * 0.92f, size.height * 0.02f), minSide * 0.82f),
                 radius = minSide * 0.82f, center = Offset(size.width * 0.92f, size.height * 0.02f)
