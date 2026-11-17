@@ -174,4 +174,59 @@ class PhaseBFeaturesTest {
             context.deleteDatabase(name)
         }
     }
+
+    @Test
+    fun phaseBDataIsPreservedByEncryptedBackupRoundTrip() {
+        val sourceDbName = "phase_b_backup_source.db"
+        val destinationDbName = "phase_b_backup_destination.db"
+        context.deleteDatabase(sourceDbName)
+        context.deleteDatabase(destinationDbName)
+        context.deleteDatabase("ai_khata_phase_b_phase_b_backup_source.db")
+        context.deleteDatabase("ai_khata_phase_b_phase_b_backup_destination.db")
+        val sourceDb = KhataDatabase(context, sourceDbName)
+        val sourceStore = PhaseBStore(context, "phase_b_backup_source")
+        val destinationDb = KhataDatabase(context, destinationDbName)
+        val destinationStore = PhaseBStore(context, "phase_b_backup_destination")
+        try {
+            sourceDb.createOwner("Source shop", "111111")
+            val customerId = sourceDb.addCustomer("Sana", "03001231234")
+            sourceDb.addTransaction(customerId, "credit", 2400.0, "Stock", "2026-11-17")
+            sourceStore.saveCustomerMeta(CustomerMeta(customerId, "wholesale", "Call in the evening", true))
+            val supplierId = sourceStore.addSupplier("Main wholesaler", "03009998877")
+            sourceStore.addSupplierEntry(supplierId, "payable", 5000.0, "Weekly stock", "2026-11-10")
+            sourceStore.addSupplierEntry(supplierId, "payment", 1500.0, "Part payment", "2026-11-12")
+            sourceStore.saveWalletReferences(WalletReferences("03001112222", "03003334444"))
+            sourceStore.setStaffPin("731946")
+            sourceStore.putSetting("weekly_reminder_day", "5")
+
+            val backup = org.json.JSONObject(sourceDb.exportBackup())
+                .put("phase_b", sourceStore.exportBackupSnapshot())
+
+            destinationDb.createOwner("Destination shop", "222222")
+            destinationDb.restoreBackup(backup.toString())
+            val phaseBSnapshot = backup.optJSONObject("phase_b")
+            PhaseBStore.validateBackupSnapshot(phaseBSnapshot)
+            destinationStore.restoreBackupSnapshot(phaseBSnapshot)
+
+            assertEquals(customerId, destinationDb.customers().single().id)
+            val restoredMeta = destinationStore.customerMeta(customerId)
+            assertEquals("wholesale", restoredMeta.tags)
+            assertEquals("Call in the evening", restoredMeta.notes)
+            assertTrue(restoredMeta.shareOptIn)
+            assertEquals(3500.0, destinationStore.suppliers().single().balance, 0.001)
+            assertEquals("03001112222", destinationStore.walletReferences().jazzCash)
+            assertEquals("03003334444", destinationStore.walletReferences().easypaisa)
+            assertTrue(destinationStore.verifyStaffPin("731946"))
+            assertEquals("5", destinationStore.getSetting("weekly_reminder_day"))
+        } finally {
+            sourceDb.close()
+            sourceStore.close()
+            destinationDb.close()
+            destinationStore.close()
+            context.deleteDatabase(sourceDbName)
+            context.deleteDatabase(destinationDbName)
+            context.deleteDatabase("ai_khata_phase_b_phase_b_backup_source.db")
+            context.deleteDatabase("ai_khata_phase_b_phase_b_backup_destination.db")
+        }
+    }
 }
