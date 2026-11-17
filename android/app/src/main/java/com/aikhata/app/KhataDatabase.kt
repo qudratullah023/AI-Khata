@@ -21,13 +21,14 @@ data class ProductRow(
     val sellingPrice: Double, val stockQuantity: Double, val lowStockThreshold: Double
 )
 data class ExpenseRow(val id: Long, val date: String, val category: String, val description: String, val amount: Double)
+data class LedgerSearchResult(val kind: String, val title: String, val detail: String, val customerId: Long? = null)
 data class ProfitLossSnapshot(
     val month: String, val trackedSales: Double, val costOfGoodsSold: Double, val grossProfit: Double,
     val expenses: Double, val netProfit: Double, val expenseCount: Int, val inventoryValue: Double,
     val lowStockCount: Int, val trackedSaleCount: Int
 )
 
-class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_local.db", null, 3) {
+class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db") : SQLiteOpenHelper(context, databaseName, null, 3) {
     override fun onConfigure(db: SQLiteDatabase) {
         db.setForeignKeyConstraintsEnabled(true)
     }
@@ -505,6 +506,96 @@ class KhataDatabase(context: Context) : SQLiteOpenHelper(context, "ai_khata_loca
         ).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
+
+    /**
+     * Search all local ledger domains without sending customer data to a server.
+     * Results are capped so the query stays responsive on entry-level Android phones.
+     */
+    fun searchEverything(rawQuery: String): List<LedgerSearchResult> {
+        val query = rawQuery.trim()
+        if (query.isBlank()) return emptyList()
+        val like = "%$query%"
+        val numeric = query.replace(Regex("(?i)rs\\.?"), "").replace(",", "").trim()
+        val results = ArrayList<LedgerSearchResult>()
+
+        customers(query).take(20).forEach { customer ->
+            results.add(
+                LedgerSearchResult(
+                    "Customer",
+                    customer.name,
+                    (if (customer.phone.isBlank()) "No phone number" else customer.phone) +
+                        " · Balance Rs. " + String.format(Locale.US, "%,.2f", customer.balance),
+                    customer.id
+                )
+            )
+        }
+
+        products().asSequence()
+            .filter { it.name.contains(query, true) || it.sku.contains(query, true) }
+            .take(20)
+            .forEach { product ->
+                results.add(
+                    LedgerSearchResult(
+                        "Product",
+                        product.name,
+                        "SKU: ${product.sku.ifBlank { "—" }} · Stock: ${product.stockQuantity} ${product.unit}"
+                    )
+                )
+            }
+
+        readableDatabase.rawQuery(
+            """SELECT c.id,c.name,t.transaction_date,t.transaction_type,t.description,t.amount_paisa
+               FROM transactions t JOIN customers c ON c.id=t.customer_id
+               WHERE t.transaction_date LIKE ? OR t.description LIKE ? OR c.name LIKE ?
+                  OR CAST(t.amount_paisa AS TEXT) LIKE ?
+                  OR CAST(ROUND(t.amount_paisa / 100.0, 2) AS TEXT) LIKE ?
+               ORDER BY t.transaction_date DESC,t.id DESC LIMIT 30""",
+            arrayOf(like, like, like, "%$numeric%", "%$numeric%")
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val amount = cursor.getLong(5) / 100.0
+                results.add(
+                    LedgerSearchResult(
+                        "Entry",
+                        cursor.getString(1) + " · " + if (cursor.getString(3) == "credit") "Sale / credit" else "Payment",
+                        cursor.getString(2) + " · Rs. " + String.format(Locale.US, "%,.2f", amount) +
+                            if (cursor.getString(4).isBlank()) "" else " · " + cursor.getString(4),
+                        cursor.getLong(0)
+                    )
+                )
+            }
+        }
+        return results.distinctBy { Triple(it.kind, it.title, it.detail) }.take(60)
+    }
+
+    /** Amounts belonging to transactions dated on the selected local day. */
+    fun dailySummary(date: String): Triple<Double, Double, Double> {
+        require(Regex("^\\\\d{4}-\\\\d{2}-\\\\d{2}$").matches(date))
+        return readableDatabase.rawQuery(
+            """SELECT
+                COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount_paisa ELSE 0 END),0),
+                COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount_paisa ELSE 0 END),0)
+               FROM transactions WHERE transaction_date=?""",
+            arrayOf(date)
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) Triple(0.0, 0.0, 0.0)
+            else {
+                val credit = cursor.getLong(0) / 100.0
+                val payments = cursor.getLong(1) / 100.0
+                Triple(credit, payments, (credit - payments).coerceAtLeast(0.0))
+            }
+        }
+    }
+
+    /** Customers whose latest recorded credit is at least 30 days old and still have a balance. */
+    fun overdueCustomerSummary(cutoffDate: String): Pair<Int, Double> {
+        val overdue = customers().filter { customer ->
+            if (customer.balance <= 0.009) false
+            else transactions(customer.id).filter { it.type == "credit" }
+                .maxOfOrNull { it.date }?.let { it <= cutoffDate } == true
+        }
+        return overdue.size to overdue.sumOf { it.balance }
+    }
 
     fun exportBackup(): String {
         val root = org.json.JSONObject()
