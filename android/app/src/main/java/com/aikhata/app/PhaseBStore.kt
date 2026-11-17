@@ -62,6 +62,31 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
             else CustomerMeta(customerId)
         }
 
+    /**
+     * Keep customer notes and tags when duplicate customer accounts are merged.
+     * Sharing consent is intentionally not inherited from the duplicate account.
+     */
+    fun mergeCustomerMeta(sourceCustomerId: Long, targetCustomerId: Long) {
+        require(sourceCustomerId != targetCustomerId)
+        val source = customerMeta(sourceCustomerId)
+        val target = customerMeta(targetCustomerId)
+        val mergedTags = (target.tags.split(",") + source.tags.split(","))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(java.util.Locale.ROOT) }
+            .joinToString(", ")
+            .take(240)
+        val mergedNotes = listOf(target.notes.trim(), source.notes.trim())
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString("\n\n")
+            .take(2000)
+        if (mergedTags.isNotBlank() || mergedNotes.isNotBlank() || target.shareOptIn) {
+            saveCustomerMeta(CustomerMeta(targetCustomerId, mergedTags, mergedNotes, target.shareOptIn))
+        }
+        writableDatabase.delete("customer_meta", "customer_id=?", arrayOf(sourceCustomerId.toString()))
+    }
+
     fun saveCustomerMeta(meta: CustomerMeta) {
         val values = ContentValues().apply {
             put("customer_id", meta.customerId)
@@ -371,6 +396,9 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
             val metadata = array("customer_meta")
             val suppliers = array("suppliers")
             val entries = array("supplier_entries")
+            val settingsValue = snapshot.opt("settings")
+            require(settingsValue == null || settingsValue == org.json.JSONObject.NULL ||
+                settingsValue is org.json.JSONObject) { "The Phase B settings backup section is damaged." }
             val settings = snapshot.optJSONObject("settings") ?: org.json.JSONObject()
             require(settings.length() <= 100) { "The Phase B settings backup is too large." }
             val customerIds = mutableSetOf<Long>()
@@ -401,7 +429,7 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
                 val date = item.optString("date")
                 require(id > 0 && entryIds.add(id) && supplierIds.contains(supplierId) &&
                     item.optString("type") in listOf("payable", "payment") &&
-                    Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(date) &&
+                    LedgerMath.isValidDate(date) &&
                     amount > 0 && amount <= 900000000000000L &&
                     item.optString("description").length <= 250
                 ) { "A supplier entry backup record is invalid." }
@@ -409,7 +437,8 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
             val settingKeys = settings.keys()
             while (settingKeys.hasNext()) {
                 val key = settingKeys.next()
-                require(key.isNotBlank() && key.length <= 100 && settings.optString(key).length <= 4096) {
+                val value = settings.opt(key)
+                require(key.isNotBlank() && key.length <= 100 && value is String && value.length <= 4096) {
                     "A Phase B setting in this backup is invalid."
                 }
             }
