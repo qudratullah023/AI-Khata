@@ -258,6 +258,16 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun SettingsSectionLabel(label: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 3.dp, top = 7.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Eyebrow(label)
+    }
+}
+
+@Composable
 private fun ThemeChoice(
     title: String,
     detail: String,
