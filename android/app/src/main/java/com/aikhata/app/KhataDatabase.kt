@@ -588,14 +588,43 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
         }
     }
 
-    /** Customers whose latest recorded credit is at least 30 days old and still have a balance. */
+    /**
+     * Apply payments to the oldest customer credits first so recent sales do not hide
+     * older unpaid balances from the weekly overdue reminder.
+     */
     fun overdueCustomerSummary(cutoffDate: String): Pair<Int, Double> {
-        val overdue = customers().filter { customer ->
-            if (customer.balance <= 0.009) false
-            else transactions(customer.id).filter { it.type == "credit" }
-                .maxOfOrNull { it.date }?.let { it <= cutoffDate } == true
+        require(Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(cutoffDate))
+        var overdueCustomers = 0
+        var overduePaisa = 0L
+        customers().forEach { customer ->
+            val outstanding = ArrayList<Pair<String, Long>>()
+            transactions(customer.id)
+                .sortedWith(compareBy<TransactionRow> { it.date }.thenBy { it.id })
+                .forEach { entry ->
+                    val amountPaisa = Math.round(entry.amount * 100.0)
+                    if (entry.type == "credit") {
+                        outstanding.add(entry.date to amountPaisa)
+                    } else {
+                        var remaining = amountPaisa
+                        var index = 0
+                        while (remaining > 0L && index < outstanding.size) {
+                            val (date, amount) = outstanding[index]
+                            val applied = minOf(amount, remaining)
+                            outstanding[index] = date to (amount - applied)
+                            remaining -= applied
+                            index++
+                        }
+                    }
+                }
+            val overdueForCustomer = outstanding
+                .filter { (date, amount) -> date <= cutoffDate && amount > 0L }
+                .sumOf { it.second }
+            if (overdueForCustomer > 0L) {
+                overdueCustomers++
+                overduePaisa += overdueForCustomer
+            }
         }
-        return overdue.size to overdue.sumOf { it.balance }
+        return overdueCustomers to (overduePaisa / 100.0)
     }
 
     fun exportBackup(): String {
