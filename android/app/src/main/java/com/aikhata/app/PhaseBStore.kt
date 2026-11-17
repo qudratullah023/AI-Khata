@@ -161,12 +161,41 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
             }
         }
 
+    /**
+     * Apply supplier payments to the oldest payable first. Only unpaid portions of
+     * payables dated on or before the cutoff are counted as overdue.
+     */
     fun overdueSupplierSummary(cutoffDate: String): Pair<Int, Double> {
-        val rows = suppliers()
-        val overdue = rows.filter { supplier ->
-            supplier.balance > 0.009 && supplierEntries(supplier.id).any { it.type == "payable" && it.date <= cutoffDate }
+        require(Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(cutoffDate))
+        var overdueSuppliers = 0
+        var overduePaisa = 0L
+        suppliers().forEach { supplier ->
+            val outstanding = ArrayList<Pair<String, Long>>()
+            supplierEntries(supplier.id).asReversed().forEach { entry ->
+                val entryPaisa = Math.round(entry.amount * 100.0)
+                if (entry.type == "payable") {
+                    outstanding.add(entry.date to entryPaisa)
+                } else {
+                    var remaining = entryPaisa
+                    var index = 0
+                    while (remaining > 0L && index < outstanding.size) {
+                        val (date, amount) = outstanding[index]
+                        val applied = minOf(amount, remaining)
+                        outstanding[index] = date to (amount - applied)
+                        remaining -= applied
+                        index++
+                    }
+                }
+            }
+            val overdueForSupplier = outstanding
+                .filter { (date, amount) -> date <= cutoffDate && amount > 0L }
+                .sumOf { it.second }
+            if (overdueForSupplier > 0L) {
+                overdueSuppliers++
+                overduePaisa += overdueForSupplier
+            }
         }
-        return overdue.size to overdue.sumOf { it.balance }
+        return overdueSuppliers to (overduePaisa / 100.0)
     }
 
     private fun now() = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date())
