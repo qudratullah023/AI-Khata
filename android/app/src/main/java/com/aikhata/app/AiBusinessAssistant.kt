@@ -9,14 +9,14 @@ data class AssistantDraft(val reply: String, val entries: JSONArray)
 
 /** Creates reviewable drafts only. It never writes ledger data itself. */
 class AiBusinessAssistant {
-    fun interpret(instruction: String, customerNames: List<String>, apiKeys: List<String>): AssistantDraft {
+    fun interpret(instruction: String, customerNames: List<String>, apiKeys: List<String>, customerLedgerContext: String = ""): AssistantDraft {
         require(instruction.isNotBlank()) { "Write or dictate what happened first." }
         require(apiKeys.isNotEmpty()) { "Add a Gemini API key in Settings to use the AI assistant." }
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
         val prompt = """
 You are the careful bookkeeping assistant inside AI Khata.
 Understand English, Urdu written in Latin letters (Roman Urdu), and mixed language.
-Turn only clearly stated transactions into proposed ledger entries.
+Handle BOTH read-only questions about existing customer history and new bookkeeping instructions. For read-only questions, answer from the supplied ledger context and return an empty entries array. Never create a draft just because the user asks a question. Turn only clearly stated new transactions into proposed ledger entries.
 Never invent a customer, date, amount, or payment direction.
 If any required detail is missing or ambiguous, return no entries and ask a short question.
 Use type credit when the shop sold goods / customer owes the shop.
