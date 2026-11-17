@@ -866,6 +866,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenCustomer = { navController.navigate("customer/" + it) },
                                 onShareStatement = { shareStatement(it) },
                                 onPrintStatement = { printStatementBluetooth(it) },
+                                onPrintReceipt = { printStatementBluetooth(it, receiptOnly = true) },
                                 onSwitchShop = { switchShop(it) }
                             )
                         }
@@ -1383,7 +1384,7 @@ class MainActivity : FragmentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun printStatementBluetooth(customerId: Long) {
+    private fun printStatementBluetooth(customerId: Long, receiptOnly: Boolean = false) {
         // Printing is an in-shop action; customer opt-in applies to external statement sharing only.
         if (android.os.Build.VERSION.SDK_INT >= 31 &&
             checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
@@ -1416,25 +1417,29 @@ class MainActivity : FragmentActivity() {
                         socket.connect()
                         val customer = db.customer(customerId) ?: throw IllegalStateException("Customer not found.")
                         val entries = db.transactions(customerId)
+                        if (receiptOnly && entries.isEmpty()) throw IllegalStateException("There is no transaction to print yet.")
                         val wallet = phaseB.walletReferences()
                         val credit = entries.filter { it.type == "credit" }.sumOf { it.amount }
                         val paid = entries.filter { it.type == "payment" }.sumOf { it.amount }
                         val receipt = buildString {
                             append(db.shopName()).append("\n")
-                            append("ACCOUNT STATEMENT\n")
+                            append(if (receiptOnly) "TRANSACTION RECEIPT\n" else "ACCOUNT STATEMENT\n")
                             append(customer.name).append("\n")
                             if (customer.phone.isNotBlank()) append(customer.phone).append("\n")
                             append("--------------------------------\n")
-                            entries.forEach {
+                            val printedEntries = if (receiptOnly) entries.take(1) else entries
+                            printedEntries.forEach {
                                 append(it.date).append("  ")
-                                    .append(if (it.type == "credit") "SALE " else "PAID ")
+                                    .append(if (it.type == "credit") "SALE " else "PAYMENT ")
                                     .append(money(it.amount)).append("\n")
                                 if (it.description.isNotBlank()) append(it.description).append("\n")
                             }
                             append("--------------------------------\n")
-                            append("Credit: ").append(money(credit)).append("\n")
-                            append("Paid: ").append(money(paid)).append("\n")
-                            append("DUE: ").append(money(credit - paid)).append("\n")
+                            if (!receiptOnly) {
+                                append("Total credit: ").append(money(credit)).append("\n")
+                                append("Total paid: ").append(money(paid)).append("\n")
+                            }
+                            append("CURRENT DUE: ").append(money(credit - paid)).append("\n")
                             if (wallet.jazzCash.isNotBlank()) append("JazzCash: ").append(wallet.jazzCash).append("\n")
                             if (wallet.easypaisa.isNotBlank()) append("Easypaisa: ").append(wallet.easypaisa).append("\n")
                             append("\n\n")
