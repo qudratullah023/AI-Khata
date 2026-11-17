@@ -1,5 +1,9 @@
 package com.aikhata.app.ui.assistant
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -164,8 +168,12 @@ fun AssistantScreen(
                             }
                         ) { Text("Send") }
                     }
-                    Text("AI suggestions are not saved automatically. Check every name, amount and date.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp, top = 5.dp))
+                    Text(
+                        "For history questions, only matched customer records are sent to your configured Gemini provider. New entries are never saved until you approve them.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(start = 6.dp, top = 5.dp)
+                    )
                 }
             }
         ) { padding ->
@@ -176,13 +184,20 @@ fun AssistantScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(messages) { line ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(0.88f),
-                                shape = RoundedCornerShape(18.dp),
-                                color = if (line.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                            ) {
-                                Text(line.text, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 10 })
+                        ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromUser) Arrangement.End else Arrangement.Start) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(0.88f).animateContentSize(),
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (line.fromUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                    tonalElevation = 2.dp,
+                                    shadowElevation = 3.dp
+                                ) {
+                                    Text(line.text, modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                                }
                             }
                         }
                     }
@@ -202,7 +217,7 @@ fun AssistantScreen(
                                 Text(entry.optString("description"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { onConfirmDraft(proposed); draft = null }, modifier = Modifier.weight(1f)) { Text("Review & save") }
+                                Button(onClick = { onConfirmDraft(proposed); draft = null }, modifier = Modifier.weight(1f)) { Text("Review entries") }
                                 TextButton(onClick = { draft = null }) { Text("Discard") }
                             }
                         }
