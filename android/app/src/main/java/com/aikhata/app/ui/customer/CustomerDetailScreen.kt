@@ -55,7 +55,8 @@ fun CustomerDetailScreen(
     onShareStatement: () -> Unit,
     onDeleteCustomer: () -> Unit,
     onEditTransaction: (TransactionRow) -> Unit,
-    onDeleteTransaction: (TransactionRow) -> Unit
+    onDeleteTransaction: (TransactionRow) -> Unit,
+    staffMode: Boolean = false
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(customerId) { viewModel.load(customerId) }
@@ -145,30 +146,39 @@ fun CustomerDetailScreen(
                             ScreenEntrance(delayMillis = 130) {
                                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                                     Eyebrow("Account controls")
-                                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                    if (staffMode) {
                                         Button(
                                             onClick = onAddCredit,
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier.fillMaxWidth(),
                                             shape = RoundedCornerShape(15.dp)
                                         ) { Text("+ Add sale") }
+                                        Text("Staff access is limited to adding sales. Payments, edits, sharing and deletion require the owner.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                    } else {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                            Button(
+                                                onClick = onAddCredit,
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(15.dp)
+                                            ) { Text("+ Add sale") }
+                                            OutlinedButton(
+                                                onClick = onRecordPayment,
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(15.dp)
+                                            ) { Text("↓ Payment") }
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                            OutlinedButton(onClick = onEditCustomer, modifier = Modifier.weight(1f)) { Text("Edit details") }
+                                            OutlinedButton(onClick = onMergeCustomer, modifier = Modifier.weight(1f)) { Text("Merge duplicate") }
+                                        }
+                                        OutlinedButton(onClick = onShareStatement, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Share account statement")
+                                        }
                                         OutlinedButton(
-                                            onClick = onRecordPayment,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(15.dp)
-                                        ) { Text("↓ Payment") }
+                                            onClick = onDeleteCustomer,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                        ) { Text("Delete this khata") }
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                        OutlinedButton(onClick = onEditCustomer, modifier = Modifier.weight(1f)) { Text("Edit details") }
-                                        OutlinedButton(onClick = onMergeCustomer, modifier = Modifier.weight(1f)) { Text("Merge duplicate") }
-                                    }
-                                    OutlinedButton(onClick = onShareStatement, modifier = Modifier.fillMaxWidth()) {
-                                        Text("Share account statement")
-                                    }
-                                    OutlinedButton(
-                                        onClick = onDeleteCustomer,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                                    ) { Text("Delete this khata") }
                                 }
                             }
                         }
@@ -207,7 +217,8 @@ fun CustomerDetailScreen(
                                     TransactionCard(
                                         entry = entry,
                                         onEdit = { onEditTransaction(entry) },
-                                        onDelete = { onDeleteTransaction(entry) }
+                                        onDelete = { onDeleteTransaction(entry) },
+                                        canManage = !staffMode
                                     )
                                 }
                             }
@@ -231,7 +242,8 @@ private fun DetailTotal(label: String, value: String, end: Boolean = false) {
 private fun TransactionCard(
     entry: TransactionRow,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    canManage: Boolean = true
 ) {
     val isCredit = entry.type == "credit"
     NeonPanel(Modifier.fillMaxWidth(), radius = 18.dp) {
@@ -266,13 +278,15 @@ private fun TransactionCard(
             if (entry.description.isNotBlank()) {
                 Text(entry.description, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Edit entry") }
-                OutlinedButton(
-                    onClick = onDelete,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+            if (canManage) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Edit entry") }
+                    OutlinedButton(
+                        onClick = onDelete,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Text("Delete") }
+                }
             }
         }
     }
