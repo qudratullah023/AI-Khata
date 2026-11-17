@@ -39,6 +39,10 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
     null,
     1
 ) {
+    override fun onConfigure(db: SQLiteDatabase) {
+        db.setForeignKeyConstraintsEnabled(true)
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE customer_meta (customer_id INTEGER PRIMARY KEY, tags TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', share_opt_in INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE suppliers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)")
