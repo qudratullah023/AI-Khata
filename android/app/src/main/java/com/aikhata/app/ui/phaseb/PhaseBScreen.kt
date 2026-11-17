@@ -220,7 +220,23 @@ fun PhaseBScreen(
                                 }
                                 Button(onClick = { saveCustomerProfile() }, modifier = Modifier.fillMaxWidth(), enabled = selectedCustomerId > 0) { Text("Save customer profile") }
                                 OutlinedButton(
-                                    onClick = { if (shareOptIn) onShareStatement(selectedCustomerId) else message = "Enable statement sharing for this customer first." },
+                                    onClick = {
+                                        if (!shareOptIn) {
+                                            message = "Enable statement sharing for this customer first."
+                                        } else {
+                                            scope.launch {
+                                                runCatching {
+                                                    withContext(Dispatchers.IO) {
+                                                        store.saveCustomerMeta(CustomerMeta(selectedCustomerId, tags, notes, true))
+                                                    }
+                                                }.onSuccess {
+                                                    onShareStatement(selectedCustomerId)
+                                                }.onFailure {
+                                                    message = it.message ?: "Could not save the sharing preference."
+                                                }
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     enabled = selectedCustomerId > 0 && shareOptIn
                                 ) { Text("Create and share read-only PDF") }
