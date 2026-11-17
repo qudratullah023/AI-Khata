@@ -10,6 +10,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
+import java.util.Locale
 
 data class CustomerRow(val id: Long, val name: String, val phone: String, val balance: Double)
 data class TransactionRow(
@@ -570,8 +571,8 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
 
     /** Amounts belonging to transactions dated on the selected local day. */
     fun dailySummary(date: String): Triple<Double, Double, Double> {
-        require(Regex("^\\\\d{4}-\\\\d{2}-\\\\d{2}$").matches(date))
         require(Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(date))
+        return readableDatabase.rawQuery(
             """SELECT
                 COALESCE(SUM(CASE WHEN transaction_type='credit' THEN amount_paisa ELSE 0 END),0),
                 COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount_paisa ELSE 0 END),0)
@@ -582,7 +583,7 @@ class KhataDatabase(context: Context, databaseName: String = "ai_khata_local.db"
             else {
                 val credit = cursor.getLong(0) / 100.0
                 val payments = cursor.getLong(1) / 100.0
-                Triple(credit, payments, (credit - payments).coerceAtLeast(0.0))
+                Triple(credit, payments, credit)
             }
         }
     }
