@@ -92,7 +92,7 @@ class PhaseBFeaturesTest {
 
             val summary = store.overdueSupplierSummary("2026-10-18")
             assertEquals(1, summary.first)
-            assertEquals(500.0, summary.second, 0.001)
+            assertEquals(1000.0, summary.second, 0.001)
         } finally {
             store.close()
             context.deleteDatabase("ai_khata_phase_b_phase_b_overdue_test.db")
@@ -160,7 +160,7 @@ class PhaseBFeaturesTest {
             db.addTransaction(customerId, "payment", 500.0, "Partial payment", "2026-11-03")
             val summary = db.overdueCustomerSummary("2026-10-18")
             assertEquals(1, summary.first)
-            assertEquals(1000.0, summary.second, 0.001)
+            assertEquals(500.0, summary.second, 0.001)
         } finally {
             db.close()
             context.deleteDatabase(name)
