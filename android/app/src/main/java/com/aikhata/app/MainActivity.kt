@@ -1377,7 +1377,7 @@ class MainActivity : FragmentActivity() {
 
     private fun readBackupFile(uri: Uri) {
         try {
-            val fileText = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            val fileText = contentResolver.openInputStream(uri)?.let { BackupFileIO.readUtf8(it) }
                 ?: throw IllegalArgumentException("The backup file could not be opened.")
             val parsed = JSONObject(fileText)
             if (parsed.optString("format") == "ai-khata-encrypted-backup") {
