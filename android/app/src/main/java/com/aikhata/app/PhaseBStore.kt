@@ -166,6 +166,47 @@ class PhaseBStore(context: Context, shopId: String) : SQLiteOpenHelper(
         }
 
     /**
+     * Search supplier accounts and payable/payment entries so "Search everything"
+     * covers both sides of the shop ledger.
+     */
+    fun searchSupplierEntries(rawQuery: String): List<LedgerSearchResult> {
+        val query = rawQuery.trim()
+        if (query.isBlank()) return emptyList()
+        val like = "%$query%"
+        val numeric = query.replace(Regex("(?i)rs\\.?"), "").replace(",", "").trim()
+        val results = ArrayList<LedgerSearchResult>()
+        suppliers().filter { it.name.contains(query, true) || it.phone.contains(query, true) }
+            .take(20).forEach { supplier ->
+                results.add(LedgerSearchResult(
+                    "Supplier",
+                    supplier.name,
+                    (if (supplier.phone.isBlank()) "No phone number" else supplier.phone) +
+                        " · Payable balance Rs. " + String.format(java.util.Locale.US, "%,.2f", supplier.balance)
+                ))
+            }
+        readableDatabase.rawQuery(
+            """SELECT s.name,e.entry_date,e.entry_type,e.description,e.amount_paisa
+               FROM supplier_entries e JOIN suppliers s ON s.id=e.supplier_id
+               WHERE e.entry_date LIKE ? OR e.description LIKE ? OR s.name LIKE ? OR s.phone LIKE ?
+                  OR CAST(e.amount_paisa AS TEXT) LIKE ?
+                  OR CAST(ROUND(e.amount_paisa / 100.0, 2) AS TEXT) LIKE ?
+               ORDER BY e.entry_date DESC,e.id DESC LIMIT 30""",
+            arrayOf(like, like, like, like, "%$numeric%", "%$numeric%")
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                results.add(LedgerSearchResult(
+                    "Supplier entry",
+                    cursor.getString(0) + " · " + if (cursor.getString(2) == "payable") "Payable" else "Payment",
+                    cursor.getString(1) + " · Rs. " +
+                        String.format(java.util.Locale.US, "%,.2f", cursor.getLong(4) / 100.0) +
+                        if (cursor.getString(3).isBlank()) "" else " · " + cursor.getString(3)
+                ))
+            }
+        }
+        return results.distinctBy { Triple(it.kind, it.title, it.detail) }.take(40)
+    }
+
+    /**
      * Apply supplier payments to the oldest payable first. Only unpaid portions of
      * payables dated on or before the cutoff are counted as overdue.
      */
