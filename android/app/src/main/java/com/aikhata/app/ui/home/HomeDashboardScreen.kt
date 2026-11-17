@@ -211,15 +211,15 @@ fun HomeDashboardScreen(
                     item {
                         ScreenEntrance(delayMillis = 180) {
                             Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Eyebrow("Workspace")
-                                Text("Quick actions", style = MaterialTheme.typography.titleLarge)
-                                Text(
-                                    "The tools you use most, all in one place.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp
-                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Eyebrow("Workspace")
+                                    Text("Quick actions", style = MaterialTheme.typography.titleLarge)
+                                    Text(
+                                        "The tools you use most, all in one place.",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp
+                                    )
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     ActionCard("Customers", "01", "View all accounts", Modifier.weight(1f), onCustomers, true)
                                     ActionCard("New customer", "+", "Open a new khata", Modifier.weight(1f), onAddCustomer)
