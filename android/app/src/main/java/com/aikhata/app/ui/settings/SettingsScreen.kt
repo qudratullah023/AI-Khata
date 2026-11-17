@@ -187,13 +187,13 @@ fun SettingsScreen(
                 ScreenEntrance(delayMillis = 260) {
                     SettingsCard(
                         "Data vault",
-                        "Export a backup before changing phones or uninstalling. Backup files contain customer records and should be kept private."
+                        "Move your encrypted shop data between phones using Google Drive or any file provider. Choose Google Drive in the Android save/open screen. Sign in to the same Google account on both phones and use the same backup password. This is a secure manual backup/restore, not automatic live sync."
                     ) {
                         Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) {
-                            Text("Export backup")
+                            Text("Save encrypted backup · Google Drive / phone")
                         }
                         OutlinedButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth()) {
-                            Text("Restore from backup")
+                            Text("Restore · Google Drive / phone")
                         }
                     }
                 }
