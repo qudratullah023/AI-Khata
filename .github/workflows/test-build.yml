@@ -2,9 +2,9 @@ name: AI Khata checks and Android APK
 
 on:
   push:
-    branches: ["main", "complete-app-android"]
+    branches: ["main", "complete-app-android", "ai-khata-visual-styles-agentic-ledger"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "next-gen-assistant-ux-cloud"]
   workflow_dispatch:
 
 permissions:
