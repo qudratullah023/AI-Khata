@@ -1562,7 +1562,9 @@ class MainActivity : FragmentActivity() {
                     toast("Use matching passwords with at least 8 characters.")
                 } else {
                     try {
-                        pendingBackupContent = BackupCrypto.encrypt(db.exportBackup(), first)
+                        val backup = JSONObject(db.exportBackup())
+                            .put("phase_b", phaseB.exportBackupSnapshot())
+                        pendingBackupContent = BackupCrypto.encrypt(backup.toString(2), first)
                             .toByteArray(Charsets.UTF_8)
                         dialog.dismiss()
                         backupCreator.launch("ai-khata-backup.aikhata")
@@ -1636,7 +1638,12 @@ class MainActivity : FragmentActivity() {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Restore") { _, _ ->
                 try {
+                    val backupRoot = JSONObject(json)
+                    val phaseBSnapshot = backupRoot.optJSONObject("phase_b")
+                    PhaseBStore.validateBackupSnapshot(phaseBSnapshot)
                     db.restoreBackup(json)
+                    phaseB.restoreBackupSnapshot(phaseBSnapshot)
+                    schedulePhaseBNotifications(this, phaseB)
                     toast("Your backup has been restored.")
                     showHome()
                 } catch (error: Exception) {
