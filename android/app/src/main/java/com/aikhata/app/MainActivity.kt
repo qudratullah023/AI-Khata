@@ -1376,10 +1376,7 @@ class MainActivity : FragmentActivity() {
 
     @SuppressLint("MissingPermission")
     private fun printStatementBluetooth(customerId: Long) {
-        if (!phaseB.customerMeta(customerId).shareOptIn) {
-            toast("Enable statement sharing for this customer first.")
-            return
-        }
+        // Printing is an in-shop action; customer opt-in applies to external statement sharing only.
         if (android.os.Build.VERSION.SDK_INT >= 31 &&
             checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {
