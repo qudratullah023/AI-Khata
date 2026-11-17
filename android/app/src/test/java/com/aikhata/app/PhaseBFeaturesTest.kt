@@ -107,6 +107,25 @@ class PhaseBFeaturesTest {
     }
 
     @Test
+    fun customerReminderKeepsOldUnpaidCreditVisibleAfterARecentSale() {
+        val name = "phase_b_overdue_customer_test.db"
+        context.deleteDatabase(name)
+        val db = KhataDatabase(context, name)
+        try {
+            val customerId = db.addCustomer("Nadia", "03005550999")
+            db.addTransaction(customerId, "credit", 1000.0, "Old credit", "2026-10-01")
+            db.addTransaction(customerId, "credit", 500.0, "Recent credit", "2026-11-02")
+            db.addTransaction(customerId, "payment", 500.0, "Partial payment", "2026-11-03")
+            val summary = db.overdueCustomerSummary("2026-10-18")
+            assertEquals(1, summary.first)
+            assertEquals(1000.0, summary.second, 0.001)
+        } finally {
+            db.close()
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test
     fun universalSearchAndDailySummaryFindLocalLedgerRecords() {
         val name = "phase_b_search_test.db"
         context.deleteDatabase(name)
