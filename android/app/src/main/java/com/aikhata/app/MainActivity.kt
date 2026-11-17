@@ -82,6 +82,7 @@ import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.net.ConnectException
@@ -1326,6 +1327,116 @@ class MainActivity : FragmentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(send, "Share read-only statement PDF"))
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingDeepAction = intent.action
+        if (unlocked) handlePendingDeepAction()
+    }
+
+    private fun handlePendingDeepAction() {
+        when (pendingDeepAction) {
+            ACTION_ADD_SALE -> {
+                pendingDeepAction = null
+                initialComposeRoute = "customers"
+                showHome()
+            }
+            ACTION_SCAN_PAGE -> {
+                pendingDeepAction = null
+                initialComposeRoute = "home"
+                showHome()
+                window.decorView.postDelayed({ chooseImage() }, 450L)
+            }
+        }
+    }
+
+    private fun switchShop(shopId: String) {
+        ShopRegistry.switchTo(this, shopId)
+        runCatching { db.close(); phaseB.close() }
+        val restart = Intent(this, MainActivity::class.java).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        )
+        startActivity(restart)
+        finish()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun printStatementBluetooth(customerId: Long) {
+        if (!phaseB.customerMeta(customerId).shareOptIn) {
+            toast("Enable statement sharing for this customer first.")
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT), 7312)
+            toast("Allow Bluetooth access, then tap Print by Bluetooth again.")
+            return
+        }
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        if (adapter == null) {
+            toast("This phone does not support Bluetooth printing.")
+            return
+        }
+        val devices = runCatching { adapter.bondedDevices?.toList().orEmpty() }.getOrDefault(emptyList())
+        if (devices.isEmpty()) {
+            toast("Pair your thermal printer in Android Bluetooth settings first.")
+            return
+        }
+        val labels = devices.map { (it.name ?: "Bluetooth printer") + " · " + it.address }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Choose paired thermal printer")
+            .setItems(labels) { _, index ->
+                val device = devices[index]
+                Thread {
+                    var socket: android.bluetooth.BluetoothSocket? = null
+                    try {
+                        adapter.cancelDiscovery()
+                        socket = device.createRfcommSocketToServiceRecord(
+                            UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+                        )
+                        socket.connect()
+                        val customer = db.customer(customerId) ?: throw IllegalStateException("Customer not found.")
+                        val entries = db.transactions(customerId)
+                        val wallet = phaseB.walletReferences()
+                        val credit = entries.filter { it.type == "credit" }.sumOf { it.amount }
+                        val paid = entries.filter { it.type == "payment" }.sumOf { it.amount }
+                        val receipt = buildString {
+                            append(db.shopName()).append("\n")
+                            append("ACCOUNT STATEMENT\n")
+                            append(customer.name).append("\n")
+                            if (customer.phone.isNotBlank()) append(customer.phone).append("\n")
+                            append("--------------------------------\n")
+                            entries.forEach {
+                                append(it.date).append("  ")
+                                    .append(if (it.type == "credit") "SALE " else "PAID ")
+                                    .append(money(it.amount)).append("\n")
+                                if (it.description.isNotBlank()) append(it.description).append("\n")
+                            }
+                            append("--------------------------------\n")
+                            append("Credit: ").append(money(credit)).append("\n")
+                            append("Paid: ").append(money(paid)).append("\n")
+                            append("DUE: ").append(money(credit - paid)).append("\n")
+                            if (wallet.jazzCash.isNotBlank()) append("JazzCash: ").append(wallet.jazzCash).append("\n")
+                            if (wallet.easypaisa.isNotBlank()) append("Easypaisa: ").append(wallet.easypaisa).append("\n")
+                            append("\n\n")
+                        }
+                        socket.outputStream.write(byteArrayOf(0x1B, 0x40))
+                        socket.outputStream.write(receipt.toByteArray(Charsets.UTF_8))
+                        socket.outputStream.write(byteArrayOf(0x1D, 0x56, 0x01))
+                        socket.outputStream.flush()
+                        runOnUiThread { toast("Statement sent to ${device.name ?: "printer"}.") }
+                    } catch (error: Exception) {
+                        runOnUiThread { toast("Bluetooth print failed. Check printer pairing and paper, then try again.") }
+                    } finally {
+                        runCatching { socket?.close() }
+                    }
+                }.start()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun shareMonthlyReport(month: String) {
