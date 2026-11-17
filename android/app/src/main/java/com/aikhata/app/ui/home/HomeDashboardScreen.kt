@@ -57,6 +57,7 @@ fun HomeDashboardScreen(
     onReports: () -> Unit,
     onBusiness: () -> Unit,
     onScan: () -> Unit,
+    onAssistant: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
     onBackup: () -> Unit,
@@ -221,8 +222,12 @@ fun HomeDashboardScreen(
                                     ActionCard("Scan ledger", "◎", "Read a photo", Modifier.weight(1f), onScan)
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ActionCard("AI Bookkeeper", "✦", "Talk to your accounts", Modifier.weight(1f), onAssistant, true)
                                     ActionCard("Business", "▦", "Stock & expenses", Modifier.weight(1f), onBusiness)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     ActionCard("Settings", "⚙", "Shop preferences", Modifier.weight(1f), onSettings)
+                                    ActionCard("Scan ledger", "◎", "Read handwritten pages", Modifier.weight(1f), onScan)
                                 }
                             }
                         }
