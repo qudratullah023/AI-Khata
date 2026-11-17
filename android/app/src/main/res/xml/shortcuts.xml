@@ -4,8 +4,8 @@
         android:shortcutId="add_sale"
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
-        android:shortcutShortLabel="Add sale"
-        android:shortcutLongLabel="Add a new sale to a customer khata">
+        android:shortcutShortLabel="@string/shortcut_add_sale"
+        android:shortcutLongLabel="@string/shortcut_add_sale_long">
         <intent
             android:action="com.aikhata.app.ADD_SALE"
             android:targetPackage="com.aikhata.app"
@@ -15,8 +15,8 @@
         android:shortcutId="scan_page"
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
-        android:shortcutShortLabel="Scan page"
-        android:shortcutLongLabel="Scan a handwritten khata page">
+        android:shortcutShortLabel="@string/shortcut_scan_page"
+        android:shortcutLongLabel="@string/shortcut_scan_page_long">
         <intent
             android:action="com.aikhata.app.SCAN_PAGE"
             android:targetPackage="com.aikhata.app"
