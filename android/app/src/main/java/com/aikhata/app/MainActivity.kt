@@ -224,6 +224,7 @@ class MainActivity : FragmentActivity() {
         } else {
             showSetup()
         }
+        checkLocalDatabaseHealth()
     }
 
     override fun onRetainCustomNonConfigurationInstance(): Any? = unlocked
@@ -485,6 +486,33 @@ class MainActivity : FragmentActivity() {
     private fun section(title: String, detail: String? = null) {
         root.addView(text(title, 17, deepGreen, true))
         if (!detail.isNullOrBlank()) root.addView(text(detail, 13, muted))
+    }
+
+    private fun checkLocalDatabaseHealth() {
+        Thread({
+            val healthy = try {
+                db.checkIntegrity()
+            } catch (_: Exception) {
+                false
+            }
+            if (!healthy) {
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    AlertDialog.Builder(this)
+                        .setTitle("Shop data needs attention")
+                        .setMessage(
+                            "AI Khata could not confirm that your local database is healthy. " +
+                                "Your records have not been automatically deleted or rebuilt. " +
+                                "Do not uninstall the app or clear its storage. If the app still opens, " +
+                                "save an encrypted backup from Settings > Backup & restore before making " +
+                                "any changes. Restore an older backup only after keeping a copy of the " +
+                                "current data where possible."
+                        )
+                        .setPositiveButton("Understood", null)
+                        .show()
+                }
+            }
+        }, "ai-khata-database-check").start()
     }
 
     private fun scheduleBackupReminder() {
