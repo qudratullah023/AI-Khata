@@ -29,6 +29,14 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
     target = _DataBlob()
     crypt = ctypes.windll.crypt32
     kernel = ctypes.windll.kernel32
+    crypt.CryptProtectData.argtypes = [ctypes.POINTER(_DataBlob), ctypes.c_wchar_p,
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(_DataBlob)]
+    crypt.CryptProtectData.restype = ctypes.c_int
+    crypt.CryptUnprotectData.argtypes = [ctypes.POINTER(_DataBlob), ctypes.POINTER(ctypes.c_wchar_p),
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(_DataBlob)]
+    crypt.CryptUnprotectData.restype = ctypes.c_int
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel.LocalFree.restype = ctypes.c_void_p
     if protect:
         ok = crypt.CryptProtectData(ctypes.byref(source), "AI Khata Desktop", None, None, None, 0, ctypes.byref(target))
     else:
@@ -103,17 +111,20 @@ def _parse_json(text: str) -> Any:
         raise ValueError("The AI response did not contain valid structured data.")
 
 
-def _with_fallback(api_key: str, parts: list[dict[str, Any]], models: tuple[str, ...] = DEFAULT_MODELS) -> str:
+def _with_fallback(api_keys: str | list[str] | tuple[str, ...], parts: list[dict[str, Any]],
+                   models: tuple[str, ...] = DEFAULT_MODELS) -> str:
+    keys = [api_keys] if isinstance(api_keys, str) else list(api_keys)
     failures = []
-    for model in models:
-        try:
-            return _request(model, api_key, parts)
-        except Exception as exc:
-            failures.append(f"{model}: {exc}")
-    raise RuntimeError("All configured AI models failed. " + " | ".join(failures))
+    for key_index, key in enumerate(keys, 1):
+        for model in models:
+            try:
+                return _request(model, key, parts)
+            except Exception as exc:
+                failures.append(f"key {key_index}/{len(keys)}, {model}: {exc}")
+    raise RuntimeError("All configured AI keys and models failed. " + " | ".join(failures))
 
 
-def ask_bookkeeper(api_key: str, question: str, context: dict[str, Any],
+def ask_bookkeeper(api_keys: str | list[str] | tuple[str, ...], question: str, context: dict[str, Any],
                    models: tuple[str, ...] = DEFAULT_MODELS) -> dict[str, Any]:
     prompt = (
         "You are the bookkeeping assistant inside a local shop management desktop application. "
@@ -127,7 +138,7 @@ def ask_bookkeeper(api_key: str, question: str, context: dict[str, Any],
         f"\nLEDGER CONTEXT (read-only): {json.dumps(context, ensure_ascii=False)}"
         f"\nUSER QUESTION: {question}"
     )
-    text = _with_fallback(api_key, [{"text": prompt}], models)
+    text = _with_fallback(api_keys, [{"text": prompt}], models)
     data = _parse_json(text)
     if not isinstance(data, dict) or not isinstance(data.get("answer"), str):
         raise ValueError("AI response is missing its answer.")
@@ -147,7 +158,7 @@ def ask_bookkeeper(api_key: str, question: str, context: dict[str, Any],
     return {"answer": data["answer"], "draft": draft}
 
 
-def read_ledger_photo(api_key: str, image_path: str | Path,
+def read_ledger_photo(api_keys: str | list[str] | tuple[str, ...], image_path: str | Path,
                       models: tuple[str, ...] = DEFAULT_MODELS) -> dict[str, Any]:
     path = Path(image_path)
     if not path.is_file() or path.stat().st_size > 12 * 1024 * 1024:
@@ -167,7 +178,7 @@ def read_ledger_photo(api_key: str, image_path: str | Path,
         {"text": prompt},
         {"inline_data": {"mime_type": mime, "data": base64.b64encode(path.read_bytes()).decode("ascii")}},
     ]
-    data = _parse_json(_with_fallback(api_key, parts, models))
+    data = _parse_json(_with_fallback(api_keys, parts, models))
     if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
         raise ValueError("The scan response did not contain a valid entries list.")
     cleaned = []
