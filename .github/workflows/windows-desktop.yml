@@ -33,9 +33,15 @@ jobs:
       - name: Build standalone Windows executable
         run: pyinstaller --noconfirm --clean --onefile --windowed --collect-all PySide6 --name AI-Khata --distpath desktop/windows/dist --workpath desktop/windows/build --specpath desktop/windows desktop/windows/main.py
       - name: Install Inno Setup
-        uses: jrsoftware/setup-innosetup@v1
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
       - name: Build installable Windows setup EXE
-        run: iscc desktop/windows/installer.iss
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { throw "Inno Setup compiler was not found at $compiler" }
+          & $compiler "desktop/windows/installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE" }
       - name: Verify installer
         shell: pwsh
         run: |
