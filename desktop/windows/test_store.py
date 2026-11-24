@@ -88,12 +88,12 @@ class StoreTests(unittest.TestCase):
 
     def test_overdue_allocation_uses_oldest_unpaid_credit(self):
         old = (date.today() - timedelta(days=45)).isoformat()
-        self.store.add_transaction(self.customer_id, "credit", 500, "Old invoice", old)
+        self.store.add_transaction(self.customer_id, "credit", 800, "Old invoice", old)
         self.store.add_transaction(self.customer_id, "credit", 300, "Recent invoice")
         self.store.add_transaction(self.customer_id, "payment", 600, "Part payment")
         overdue = self.store.overdue_customers(30)
         self.assertEqual(overdue[0]["overdue_paisa"], 20000)
-        self.assertEqual(overdue[0]["due_paisa"], 20000)
+        self.assertEqual(overdue[0]["due_paisa"], 50000)
 
     def test_encrypted_backup_round_trip_and_owner_pin_preservation(self):
         self.store.db.execute("INSERT INTO owner VALUES(1,?,?,?,?)",
