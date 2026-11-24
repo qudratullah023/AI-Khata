@@ -533,6 +533,9 @@ class Store:
         tables: dict[str, list[dict[str, Any]]] = {}
         for table in TABLES:
             tables[table] = [dict(row) for row in self.db.execute(f"SELECT * FROM {table}")]
+        # API credentials are protected for one Windows user profile and are not portable backups.
+        tables["settings"] = [row for row in tables["settings"]
+                              if row["setting_key"] not in ("ai_key", "ai_keys")]
         payload = json.dumps({"format": BACKUP_MAGIC, "version": BACKUP_VERSION,
                               "exported_at": datetime.now().isoformat(timespec="seconds"),
                               "tables": tables}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -568,6 +571,7 @@ class Store:
             if any(set(row) != allowed for row in rows):
                 raise ValueError(f"Unexpected columns in backup table: {table}.")
         current_owner = self.db.execute("SELECT * FROM owner WHERE id=1").fetchone()
+        current_ai_keys = self.db.execute("SELECT setting_key,setting_value FROM settings WHERE setting_key IN ('ai_key','ai_keys')").fetchall()
         self.db.execute("BEGIN IMMEDIATE")
         try:
             # The destination shop identity and owner PIN are deliberately retained.
@@ -583,6 +587,14 @@ class Store:
                     names = ",".join(columns)
                     self.db.executemany(f"INSERT INTO {table}({names}) VALUES({marks})",
                                         [tuple(row[col] for col in columns) for row in rows])
+            for row in current_ai_keys:
+                self.db.execute("INSERT INTO settings(setting_key,setting_value) VALUES(?,?) "
+                                "ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value",
+                                (row["setting_key"], row["setting_value"]))
+            quick = self.db.execute("PRAGMA quick_check(1)").fetchone()[0]
+            foreign_key_errors = self.db.execute("PRAGMA foreign_key_check").fetchall()
+            if quick != "ok" or foreign_key_errors:
+                raise ValueError("Restored database failed its integrity check.")
             self.db.execute("DELETE FROM owner")
             if current_owner:
                 self.db.execute("INSERT INTO owner(id,shop_name,pin_salt,pin_hash,created_at) VALUES(?,?,?,?,?)",
