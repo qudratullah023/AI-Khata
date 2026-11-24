@@ -445,7 +445,7 @@ class Store:
                    COALESCE(SUM(CASE WHEN product_id IS NOT NULL AND unit_cost_paisa IS NOT NULL
                      THEN (quantity_milli*unit_cost_paisa)/1000 ELSE 0 END),0) cogs
             FROM transactions
-            WHERE transaction_type='credit' AND transaction_date LIKE ?
+            WHERE transaction_type='credit' AND product_id IS NOT NULL AND transaction_date LIKE ?
         """, (month + "%",)).fetchone()
         expense = self.db.execute(
             "SELECT COALESCE(SUM(amount_paisa),0) FROM expenses WHERE expense_date LIKE ?",
@@ -467,10 +467,16 @@ class Store:
                 FROM transactions WHERE customer_id=? ORDER BY transaction_date,id
             """, (customer["id"],)).fetchall()
             unpaid: list[list[Any]] = []
+            advance = 0
             for row in entries:
                 amount = int(row["amount_paisa"])
                 if row["transaction_type"] == "credit":
-                    unpaid.append([row["transaction_date"], amount])
+                    # Earlier advance payments are applied to later credit entries first.
+                    used = min(amount, advance)
+                    amount -= used
+                    advance -= used
+                    if amount:
+                        unpaid.append([row["transaction_date"], amount])
                 else:
                     remaining = amount
                     for item in unpaid:
@@ -479,6 +485,7 @@ class Store:
                         remaining -= used
                         if remaining == 0:
                             break
+                    advance += remaining
             due = sum(item[1] for item in unpaid)
             overdue = sum(item[1] for item in unpaid if item[0] <= cutoff)
             if due > 0 and overdue > 0:
@@ -520,6 +527,15 @@ class Store:
         for row in tx_rows:
             results.append({"type": "Ledger entry", "id": row["id"], "title": row["name"],
                             "detail": f"{row['transaction_date']} · {row['transaction_type']} · {row['description']} · {row['amount_paisa']/100:.2f}"})
+        supplier_rows = self.db.execute("""
+            SELECT e.id,e.entry_date,e.entry_type,e.description,e.amount_paisa,s.name
+            FROM supplier_entries e JOIN suppliers s ON s.id=e.supplier_id
+            WHERE e.description LIKE ? OR e.entry_date LIKE ? OR s.name LIKE ?
+            ORDER BY e.entry_date DESC LIMIT 20
+        """, (like, like, like)).fetchall()
+        for row in supplier_rows:
+            results.append({"type": "Supplier entry", "id": row["id"], "title": row["name"],
+                            "detail": f"{row['entry_date']} · {row['entry_type']} · {row['description']} · {row['amount_paisa']/100:.2f}"})
         return results[:75]
 
     def integrity_check(self) -> tuple[bool, str]:
