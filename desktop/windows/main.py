@@ -311,9 +311,9 @@ class MainWindow(QMainWindow):
         hero.setObjectName("hero")
         h = QVBoxLayout(hero)
         h.setContentsMargins(26, 22, 26, 22)
-        greeting = QLabel(f"Welcome to {self.shop_name}")
-        greeting.setObjectName("heroTitle")
-        h.addWidget(greeting)
+        self.hero_greeting = QLabel(f"Welcome to {self.shop_name}")
+        self.hero_greeting.setObjectName("heroTitle")
+        h.addWidget(self.hero_greeting)
         h.addWidget(QLabel("Your shop accounts, stock and daily performance in one place."))
         layout.addWidget(hero)
         cards = QGridLayout()
@@ -329,7 +329,8 @@ class MainWindow(QMainWindow):
         q.addWidget(self._button("＋ New customer", self.add_customer, True))
         q.addWidget(self._button("＋ Record credit", lambda: self.add_entry("credit")))
         q.addWidget(self._button("＋ Receive payment", lambda: self.add_entry("payment")))
-        q.addWidget(self._button("Scan ledger photo", self.scan_ledger))
+        self.dashboard_scan_button = self._button("Scan ledger photo", self.scan_ledger)
+        q.addWidget(self.dashboard_scan_button)
         layout.addWidget(quick)
         lower = QHBoxLayout()
         recent_box = QGroupBox("Recent customer accounts")
@@ -604,10 +605,14 @@ class MainWindow(QMainWindow):
 
     # Navigation and shortcuts
     def _setup_shortcuts(self) -> None:
-        QShortcut(QKeySequence("Ctrl+N"), self, activated=self.add_customer)
-        QShortcut(QKeySequence("Ctrl+F"), self, activated=self.global_search.setFocus)
-        QShortcut(QKeySequence("Ctrl+Shift+S"), self, activated=self.export_backup)
-        QShortcut(QKeySequence("F5"), self, activated=self.refresh_all)
+        shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        shortcut.activated.connect(self.add_customer)
+        shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        shortcut.activated.connect(self.global_search.setFocus)
+        shortcut = QShortcut(QKeySequence("Ctrl+Shift+S"), self)
+        shortcut.activated.connect(self.export_backup)
+        shortcut = QShortcut(QKeySequence("F5"), self)
+        shortcut.activated.connect(self.refresh_all)
 
     def _apply_theme(self, theme: str) -> None:
         themes = {
@@ -693,6 +698,8 @@ class MainWindow(QMainWindow):
             button.setVisible(not self.staff_mode)
         if hasattr(self, "customer_meta_group"):
             self.customer_meta_group.setVisible(not self.staff_mode)
+        if hasattr(self, "dashboard_scan_button"):
+            self.dashboard_scan_button.setVisible(not self.staff_mode)
         for button in getattr(self, "customer_document_buttons", []):
             button.setVisible(not self.staff_mode)
         for button in [getattr(self, "product_add_button", None),
@@ -827,8 +834,7 @@ class MainWindow(QMainWindow):
                       f"{row['low_stock_milli']/1000:g}"]
             for col, value in enumerate(values):
                 self.product_table.setItem(idx, col, QTableWidgetItem(str(value)))
-        if self.staff_mode:
-            self.product_table.setColumnHidden(3, True)
+        self.product_table.setColumnHidden(3, self.staff_mode)
         self.refresh_customer_combos()
 
     def refresh_expenses(self) -> None:
@@ -914,6 +920,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def edit_customer(self) -> None:
+        if self.staff_mode:
+            return
         cid = self.current_customer_id
         customer = self.store.customer(cid) if cid else None
         if not customer:
@@ -932,6 +940,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def delete_customer(self) -> None:
+        if self.staff_mode:
+            return
         cid = self.current_customer_id
         customer = self.store.customer(cid) if cid else None
         if not customer:
@@ -1045,6 +1055,8 @@ class MainWindow(QMainWindow):
         return True
 
     def statement_pdf(self) -> None:
+        if self.staff_mode:
+            return
         cid = self.current_customer_id
         if not cid or not self._check_statement_consent(cid):
             return
@@ -1091,6 +1103,8 @@ class MainWindow(QMainWindow):
         inform(self, "The customer statement PDF has been saved.")
 
     def print_statement(self) -> None:
+        if self.staff_mode:
+            return
         cid = self.current_customer_id
         if not cid:
             inform(self, "Select a customer first.")
@@ -1145,6 +1159,8 @@ class MainWindow(QMainWindow):
 
     # Suppliers and stock
     def save_supplier(self) -> None:
+        if self.staff_mode:
+            return
         name = self.supplier_name.text().strip()
         if not name:
             inform(self, "Enter the supplier name.", True)
@@ -1169,6 +1185,8 @@ class MainWindow(QMainWindow):
         return int(self.product_table.item(row, 0).text()) if row >= 0 else None
 
     def add_product(self) -> None:
+        if self.staff_mode:
+            return
         name = ask_text(self, "New product", "Product name")
         if not name:
             return
@@ -1193,6 +1211,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def edit_product(self) -> None:
+        if self.staff_mode:
+            return
         pid = self._selected_product()
         product = self.store.db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone() if pid else None
         if not product:
@@ -1226,6 +1246,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def adjust_stock(self) -> None:
+        if self.staff_mode:
+            return
         pid = self._selected_product()
         if not pid:
             inform(self, "Select a product first.")
@@ -1240,6 +1262,8 @@ class MainWindow(QMainWindow):
                 inform(self, str(exc), True)
 
     def delete_product(self) -> None:
+        if self.staff_mode:
+            return
         pid = self._selected_product()
         if not pid:
             inform(self, "Select a product first.")
@@ -1268,6 +1292,8 @@ class MainWindow(QMainWindow):
 
     # Expenses and reports
     def save_expense(self) -> None:
+        if self.staff_mode:
+            return
         try:
             self.store.add_expense(self.expense_category.currentText(),
                 self.expense_description.text(), self.expense_amount.value())
@@ -1278,6 +1304,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def delete_expense(self) -> None:
+        if self.staff_mode:
+            return
         row = self.expense_table.currentRow()
         if row < 0:
             inform(self, "Select an expense first.")
@@ -1288,19 +1316,27 @@ class MainWindow(QMainWindow):
             self.refresh_all()
 
     def run_integrity_check(self) -> None:
+        if self.staff_mode:
+            return
         ok, message = self.store.integrity_check()
         inform(self, message, not ok)
 
     # AI bookkeeper and photo review
-    def _ai_credentials(self) -> tuple[str, tuple[str, ...]]:
-        stored = self.store.setting("ai_key")
-        if not stored:
-            raise ValueError("Add a Gemini API key in Settings to use the assistant.")
-        key = reveal_api_key(stored)
+    def _ai_credentials(self) -> tuple[list[str], tuple[str, ...]]:
+        if self.staff_mode:
+            raise ValueError("AI features are available to the shop owner only.")
+        try:
+            encrypted = json.loads(self.store.setting("ai_keys", "[]"))
+        except json.JSONDecodeError:
+            encrypted = []
+        if not encrypted:
+            legacy = self.store.setting("ai_key")
+            encrypted = [legacy] if legacy else []
+        keys = [reveal_api_key(item) for item in encrypted if item]
+        if not keys:
+            raise ValueError("Add one or more Gemini API keys in Settings to use the assistant.")
         models = tuple(x.strip() for x in self.store.setting("ai_models", ",".join(DEFAULT_MODELS)).split(",") if x.strip())
-        if not models:
-            models = DEFAULT_MODELS
-        return key, models
+        return keys, models or DEFAULT_MODELS
 
     def _selected_ai_context(self) -> dict[str, Any]:
         cid = self.ai_customer.currentData()
@@ -1377,6 +1413,8 @@ class MainWindow(QMainWindow):
         inform(self, message, True)
 
     def scan_ledger(self) -> None:
+        if self.staff_mode:
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Choose a handwritten ledger photo", "",
             "Images (*.jpg *.jpeg *.png *.webp)")
         if not path:
@@ -1429,6 +1467,8 @@ class MainWindow(QMainWindow):
 
     # Settings and multi-shop management
     def save_staff_pin(self) -> None:
+        if self.staff_mode:
+            return
         pin = self.staff_pin_input.text().strip()
         if len(pin) < 6 or not pin.isdigit():
             inform(self, "Use a staff PIN containing at least six digits.", True)
@@ -1441,6 +1481,8 @@ class MainWindow(QMainWindow):
         inform(self, "Staff PIN saved. Staff accounts cannot access financial reports, settings or destructive actions.")
 
     def save_preferences(self) -> None:
+        if self.staff_mode:
+            return
         daily_time = self.daily_time.text().strip()
         if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", daily_time):
             inform(self, "Enter daily summary time in 24-hour HH:MM format.", True)
@@ -1455,10 +1497,15 @@ class MainWindow(QMainWindow):
         inform(self, "Business preferences saved.")
 
     def save_ai_settings(self) -> None:
-        key = self.ai_key_input.text().strip()
+        if self.staff_mode:
+            return
+        raw_keys = self.ai_key_input.text().replace("\\n", ";")
+        keys = [x.strip() for x in raw_keys.split(";") if x.strip()]
         try:
-            if key:
-                self.store.set_setting("ai_key", protect_api_key(key))
+            if keys:
+                protected = [protect_api_key(key) for key in keys[:5]]
+                self.store.set_setting("ai_keys", json.dumps(protected))
+                self.store.set_setting("ai_key", "")
             models = [x.strip() for x in self.ai_models_input.text().split(",") if x.strip()]
             if not models:
                 raise ValueError("Enter at least one AI model name.")
@@ -1470,13 +1517,18 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def remove_ai_key(self) -> None:
-        if confirm(self, "Remove the saved AI service key from this shop?"):
+        if self.staff_mode:
+            return
+        if confirm(self, "Remove the saved AI service keys from this shop?"):
+            self.store.set_setting("ai_keys", "[]")
             self.store.set_setting("ai_key", "")
             self.ai_key_input.clear()
             self.ai_status.setText("No AI key is configured.")
             inform(self, "Saved AI key removed.")
 
     def export_backup(self) -> None:
+        if self.staff_mode:
+            return
         password, ok = QInputDialog.getText(self, "Protect backup",
             "Create a backup password (at least 8 characters):", QLineEdit.EchoMode.Password)
         if not ok:
@@ -1492,6 +1544,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def restore_backup(self) -> None:
+        if self.staff_mode:
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Choose encrypted AI Khata backup", "",
             "Encrypted backup (*.json)")
         if not path:
@@ -1510,10 +1564,14 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
 
     def open_data_folder(self) -> None:
+        if self.staff_mode:
+            return
         import subprocess
         subprocess.Popen(["explorer", str(APP_DIR)])
 
     def create_shop(self) -> None:
+        if self.staff_mode:
+            return
         name = ask_text(self, "Create shop", "New shop name")
         if not name:
             return
@@ -1570,8 +1628,10 @@ class MainWindow(QMainWindow):
         self.shop_id = item["id"]
         self.shop_name = item["name"]
         self.staff_mode = bool(staff and not owner_ok)
+        self.current_customer_id = None
         self.setWindowTitle(f"{APP_NAME}  |  {self.shop_name}")
         self.business_name_label.setText(self.shop_name)
+        self.hero_greeting.setText(f"Welcome to {self.shop_name}")
         self._apply_access_rules()
         self.refresh_all()
         self.navigate("Dashboard")
