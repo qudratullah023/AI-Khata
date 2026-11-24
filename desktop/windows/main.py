@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import date, datetime, timedelta
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QPdfWriter, QPainter, QFont, QPageSize
+from PySide6.QtPrintSupport import QPrinter, QPrintDialog
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QLineEdit, QPushButton, QLabel, QMessageBox, QTabWidget, QTableWidget,
     QTableWidgetItem, QHeaderView, QComboBox, QDoubleSpinBox, QTextEdit, QFileDialog,
@@ -143,7 +145,7 @@ class Main(QMainWindow):
         form=QFormLayout(); self.tx_type=QComboBox(); self.tx_type.addItems(["Credit","Payment"]); self.tx_amount=QDoubleSpinBox(); self.tx_amount.setMaximum(1e9); self.tx_amount.setDecimals(2); self.tx_amount.setPrefix("Rs. "); self.tx_desc=QLineEdit(); form.addRow("Entry type",self.tx_type); form.addRow("Amount",self.tx_amount); form.addRow("Description",self.tx_desc); p.addLayout(form)
         add=QPushButton("Save ledger entry"); add.clicked.connect(self.save_tx); p.addWidget(add)
         meta=QGroupBox("Customer profile"); mf=QFormLayout(meta); self.tags=QLineEdit(); self.notes=QLineEdit(); self.share=QCheckBox("Customer agreed to receive a read-only statement"); mf.addRow("Tags",self.tags); mf.addRow("Notes",self.notes); mf.addRow(self.share); save=QPushButton("Save profile"); save.clicked.connect(self.save_meta); mf.addRow(save); p.addWidget(meta)
-        actions=QHBoxLayout(); pdf=QPushButton("Export statement PDF"); pdf.clicked.connect(self.statement_pdf); actions.addWidget(pdf); pr=QPushButton("Print statement"); pr.clicked.connect(self.statement_pdf); actions.addWidget(pr); p.addLayout(actions)
+        actions=QHBoxLayout(); pdf=QPushButton("Export statement PDF"); pdf.clicked.connect(self.statement_pdf); actions.addWidget(pdf); pr=QPushButton("Print statement"); pr.clicked.connect(self.print_statement); actions.addWidget(pr); p.addLayout(actions)
         split.addWidget(pane); split.setSizes([400,700]); l.addWidget(split); self.tabs.addTab(w,"Customers")
     def build_suppliers(self):
         w=QWidget(); l=QVBoxLayout(w); self.supplier_table=self.table(["ID","Supplier","Phone","Outstanding"]); l.addWidget(self.supplier_table)
@@ -269,6 +271,24 @@ class Main(QMainWindow):
             painter.drawText(60,y,f"{r['transaction_date']}   {r['transaction_type']}   {r['description'][:48]}   Rs. {r['amount_paisa']/100:,.2f}"); y+=25
             if y>writer.height()-80: writer.newPage(); y=80
         painter.end(); alert(self,"Statement PDF saved.")
+    def print_statement(self):
+        cid=self.selected_customer()
+        if not cid:return alert(self,"Select a customer first.")
+        cust=self.store.db.execute("SELECT * FROM customers WHERE id=?",(cid,)).fetchone()
+        if not cust:return
+        doc=QTextDocument()
+        rows=self.store.txs(cid)
+        html=f"<h2>AI Khata — Customer Statement</h2><p><b>{cust['name']}</b> · {cust['phone']}</p>"
+        html+=f"<p>JazzCash: {self.store.setting('wallet_jazzcash','Not set')} · Easypaisa: {self.store.setting('wallet_easypaisa','Not set')}</p>"
+        html+="<table width='100%' cellspacing='0' cellpadding='5' border='1'><tr><th>Date</th><th>Type</th><th>Description</th><th>Amount</th></tr>"
+        for r in rows:
+            html+=f"<tr><td>{r['transaction_date']}</td><td>{r['transaction_type']}</td><td>{r['description']}</td><td>{money(r['amount_paisa']/100)}</td></tr>"
+        html+="</table>"
+        doc.setHtml(html)
+        printer=QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog=QPrintDialog(printer,self)
+        if dialog.exec()==QDialog.DialogCode.Accepted:
+            doc.print_(printer)
     def set_staff_pin(self):
         pin=ask_text(self,"Staff access","Set a staff PIN (at least 6 digits)",True)
         if pin and len(pin)>=6 and pin.isdigit():
