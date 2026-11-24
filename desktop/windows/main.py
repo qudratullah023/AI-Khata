@@ -178,6 +178,7 @@ class MainWindow(QMainWindow):
         self.resize(1360, 860)
         self._build_shell()
         self._build_pages()
+        self.navigate("Dashboard")
         self._apply_theme(self.store.setting("theme", "Liquid Glass"))
         self._apply_access_rules()
         self.refresh_all()
@@ -251,7 +252,6 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         right_layout.addWidget(self.pages, 1)
         root_layout.addWidget(right, 1)
-        self.navigate("Dashboard")
 
     def _page(self, key: str, title: str) -> tuple[QWidget, QVBoxLayout]:
         page = QWidget()
@@ -715,8 +715,6 @@ class MainWindow(QMainWindow):
                 button.setVisible(not self.staff_mode)
         if hasattr(self, "ledger_table"):
             self.ledger_table.setColumnHidden(0, True)
-        if hasattr(self, "report_month"):
-            pass
 
     def _setup_notifications(self) -> None:
         self.tray = QSystemTrayIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon), self)
@@ -1657,6 +1655,8 @@ class MainWindow(QMainWindow):
         if not query:
             return
         results = self.store.universal_search(query)
+        if self.staff_mode:
+            results = [item for item in results if item["type"] not in ("Supplier", "Supplier entry")]
         dialog = QDialog(self)
         dialog.setWindowTitle("Search results")
         dialog.resize(780, 460)
