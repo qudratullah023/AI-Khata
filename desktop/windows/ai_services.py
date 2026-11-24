@@ -192,12 +192,26 @@ def read_ledger_photo(api_keys: str | list[str] | tuple[str, ...], image_path: s
             amount = None
         if amount is not None and not 0 < amount <= 100_000_000:
             amount = None
+        try:
+            confidence = float(item.get("confidence", 0) or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if not 0.0 <= confidence <= 1.0:
+            confidence = 0.0
+        entry_date = str(item.get("date") or "")[:10]
+        if entry_date:
+            try:
+                from datetime import datetime
+                datetime.strptime(entry_date, "%Y-%m-%d")
+            except ValueError:
+                entry_date = ""
         cleaned.append({
             "customer_name": str(item.get("customer_name", "")).strip()[:100],
-            "date": str(item.get("date") or "")[:10],
+            "date": entry_date,
             "type": item["type"], "amount": amount,
             "description": str(item.get("description", "")).strip()[:240],
-            "confidence": max(0.0, min(1.0, float(item.get("confidence", 0) or 0))),
-            "needs_review": bool(item.get("needs_review", False)) or amount is None,
+            "confidence": confidence,
+            "needs_review": bool(item.get("needs_review", False)) or amount is None
+                            or not str(item.get("customer_name", "")).strip() or not entry_date,
         })
     return {"entries": cleaned, "notes": str(data.get("notes", ""))[:1000]}
