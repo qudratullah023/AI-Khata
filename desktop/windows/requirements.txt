@@ -1,4 +1,4 @@
-PySide6>=6.7
-cryptography>=42
-pyserial>=3.5
-pyinstaller>=6.8
+PySide6-Essentials>=6.7,<7
+cryptography>=42,<51
+pyserial>=3.5,<4
+pyinstaller>=6.8,<7
