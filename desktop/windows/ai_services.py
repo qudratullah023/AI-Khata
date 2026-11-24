@@ -211,7 +211,7 @@ def read_ledger_photo(api_keys: str | list[str] | tuple[str, ...], image_path: s
             "type": item["type"], "amount": amount,
             "description": str(item.get("description", "")).strip()[:240],
             "confidence": confidence,
-            "needs_review": bool(item.get("needs_review", False)) or amount is None
+            "needs_review": bool(item.get("needs_review", False)) or amount is None or confidence < 0.6
                             or not str(item.get("customer_name", "")).strip() or not entry_date,
         })
     return {"entries": cleaned, "notes": str(data.get("notes", ""))[:1000]}
