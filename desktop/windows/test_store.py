@@ -66,6 +66,8 @@ class StoreTests(unittest.TestCase):
         self.store.add_supplier_entry(sid, "payable", 2000, "Stock purchase")
         self.store.add_supplier_entry(sid, "payment", 500, "Bank transfer")
         self.assertEqual(self.store.suppliers()[0]["balance_paisa"], 150000)
+        self.assertTrue(any(x["type"] == "Supplier entry"
+                            for x in self.store.universal_search("Stock purchase")))
 
     def test_daily_summary_separates_credit_and_receipts(self):
         self.store.add_transaction(self.customer_id, "credit", 800, "Sale")
@@ -78,6 +80,7 @@ class StoreTests(unittest.TestCase):
     def test_profit_loss_uses_cost_snapshots_and_expenses(self):
         pid = self.store.add_product("Flour", "FLR", "bag", 700, 900, 10, 2)
         self.store.record_product_sale(self.customer_id, pid, 2)
+        self.store.add_transaction(self.customer_id, "credit", 5000, "Manual entry")
         self.store.add_expense("Utilities", "Electricity", 100)
         report = self.store.profit_loss()
         self.assertEqual(report["revenue_paisa"], 180000)
@@ -94,6 +97,13 @@ class StoreTests(unittest.TestCase):
         overdue = self.store.overdue_customers(30)
         self.assertEqual(overdue[0]["overdue_paisa"], 20000)
         self.assertEqual(overdue[0]["due_paisa"], 50000)
+
+
+    def test_advance_payment_covers_future_credit_for_overdue_ageing(self):
+        old = (date.today() - timedelta(days=45)).isoformat()
+        self.store.add_transaction(self.customer_id, "payment", 500, "Advance", old)
+        self.store.add_transaction(self.customer_id, "credit", 500, "Later goods", old)
+        self.assertEqual(self.store.overdue_customers(30), [])
 
     def test_encrypted_backup_round_trip_and_owner_pin_preservation(self):
         self.store.db.execute("INSERT INTO owner VALUES(1,?,?,?,?)",
