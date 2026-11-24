@@ -393,8 +393,10 @@ class MainWindow(QMainWindow):
         txbar = QHBoxLayout()
         txbar.addWidget(self._button("New credit", lambda: self.add_entry("credit"), True))
         txbar.addWidget(self._button("Receive payment", lambda: self.add_entry("payment")))
-        txbar.addWidget(self._button("Edit entry", self.edit_entry))
-        txbar.addWidget(self._button("Delete entry", self.delete_entry))
+        self.edit_entry_button = self._button("Edit entry", self.edit_entry)
+        self.delete_entry_button = self._button("Delete entry", self.delete_entry)
+        txbar.addWidget(self.edit_entry_button)
+        txbar.addWidget(self.delete_entry_button)
         rl.addLayout(txbar)
         profile = QGroupBox("Customer information")
         pf = QFormLayout(profile)
@@ -588,7 +590,7 @@ class MainWindow(QMainWindow):
         aif = QFormLayout(ai)
         self.ai_key_input = QLineEdit()
         self.ai_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.ai_key_input.setPlaceholderText("Paste your Gemini API key")
+        self.ai_key_input.setPlaceholderText("Paste one or more Gemini API keys, separated by semicolons")
         self.ai_models_input = QLineEdit(self.store.setting("ai_models", ",".join(DEFAULT_MODELS)))
         aif.addRow("Gemini API key", self.ai_key_input)
         aif.addRow("Model fallback order", self.ai_models_input)
@@ -698,6 +700,9 @@ class MainWindow(QMainWindow):
             button.setVisible(not self.staff_mode)
         if hasattr(self, "customer_meta_group"):
             self.customer_meta_group.setVisible(not self.staff_mode)
+        if hasattr(self, "edit_entry_button"):
+            self.edit_entry_button.setVisible(not self.staff_mode)
+            self.delete_entry_button.setVisible(not self.staff_mode)
         if hasattr(self, "dashboard_scan_button"):
             self.dashboard_scan_button.setVisible(not self.staff_mode)
         for button in getattr(self, "customer_document_buttons", []):
@@ -1672,7 +1677,7 @@ class MainWindow(QMainWindow):
         now = datetime.now()
         day_key = now.strftime("%Y-%m-%d")
         daily_time = self.store.setting("daily_summary_time", "20:00")
-        if now.strftime("%H:%M") == daily_time and self.store.setting("last_daily_notice") != day_key:
+        if now.strftime("%H:%M") >= daily_time and self.store.setting("last_daily_notice") != day_key:
             summary = self.store.daily_summary()
             self.tray.showMessage(APP_NAME, f"Daily sales: {money(summary['sales_paisa'])} · "
                 f"Payments: {money(summary['receipts_paisa'])} · Net due: {money(summary['net_due_change_paisa'])}",
