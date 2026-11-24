@@ -2,7 +2,7 @@ import json, os, sqlite3, sys, hashlib, secrets, hmac, shutil
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QPdfWriter, QPainter, QFont
+from PySide6.QtGui import QAction, QPdfWriter, QPainter, QFont, QPageSize
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QLineEdit, QPushButton, QLabel, QMessageBox, QTabWidget, QTableWidget,
     QTableWidgetItem, QHeaderView, QComboBox, QDoubleSpinBox, QTextEdit, QFileDialog,
@@ -263,7 +263,7 @@ class Main(QMainWindow):
         if not self.share.isChecked():return alert(self,"Enable customer statement sharing only after receiving the customer's consent.",True)
         p,_=QFileDialog.getSaveFileName(self,"Save statement PDF",f"{cust['name']}-statement.pdf","PDF (*.pdf)")
         if not p:return
-        writer=QPdfWriter(p); writer.setPageSize(QPdfWriter.PageSize.A4); painter=QPainter(writer); painter.setFont(QFont("Arial",14)); y=80
+        writer=QPdfWriter(p); writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4)); painter=QPainter(writer); painter.setFont(QFont("Arial",14)); y=80
         painter.drawText(60,y,"AI Khata — Customer Statement"); y+=55; painter.setFont(QFont("Arial",10)); painter.drawText(60,y,f"Customer: {cust['name']}  |  Phone: {cust['phone']}"); y+=35
         for r in self.store.txs(cid):
             painter.drawText(60,y,f"{r['transaction_date']}   {r['transaction_type']}   {r['description'][:48]}   Rs. {r['amount_paisa']/100:,.2f}"); y+=25
@@ -285,7 +285,26 @@ class Main(QMainWindow):
         if index<0 or index>=len(self.shops):return
         shop=self.shops[index]
         if shop["id"]==self.shop_id:return
-        QMessageBox.information(self,"Switch shop","Close AI Khata and reopen it to unlock the selected shop. (Shop data remains separate.)")
+        candidate=Store(shop["path"])
+        owner=candidate.db.execute("SELECT * FROM owner WHERE id=1").fetchone()
+        if not owner:
+            candidate.close(); return alert(self,"This shop profile is incomplete.",True)
+        dlg=LoginDialog(shop["name"],parent=self)
+        if dlg.exec()!=QDialog.DialogCode.Accepted:
+            candidate.close()
+            self.shop_pick.blockSignals(True); self.shop_pick.setCurrentIndex(next((i for i,x in enumerate(self.shops) if x["id"]==self.shop_id),0)); self.shop_pick.blockSignals(False)
+            return
+        pin=dlg.value()
+        is_staff=candidate.setting("staff_pin_enabled")=="1" and verify_pin(pin,candidate.setting("staff_pin_salt"),candidate.setting("staff_pin_hash"))
+        if not is_staff and not verify_pin(pin,owner["pin_salt"],owner["pin_hash"]):
+            candidate.close(); alert(self,"Incorrect PIN. Shop was not switched.",True)
+            self.shop_pick.blockSignals(True); self.shop_pick.setCurrentIndex(next((i for i,x in enumerate(self.shops) if x["id"]==self.shop_id),0)); self.shop_pick.blockSignals(False)
+            return
+        self.store.close(); self.store=candidate; self.shop_id=shop["id"]; self.shop_name=shop["name"]; self.staff=is_staff
+        self.setWindowTitle(f"AI Khata — {shop['name']}" + (" · Staff" if is_staff else ""))
+        for idx in range(self.tabs.count()):
+            self.tabs.setTabEnabled(idx, not (is_staff and idx in [2,4,5,6]))
+        self.refresh_all()
     def check_reminders(self):
         if self.store.setting("weekly_reminder_enabled","1")=="1":
             last=self.store.setting("last_overdue_notice")
