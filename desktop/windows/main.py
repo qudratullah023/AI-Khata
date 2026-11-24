@@ -154,7 +154,10 @@ class Main(QMainWindow):
         w=QWidget(); l=QVBoxLayout(w); self.product_table=self.table(["ID","Product","SKU","Buy","Sell","Stock","Low stock"]); l.addWidget(self.product_table)
         f=QFormLayout(); self.pname=QLineEdit(); self.psku=QLineEdit(); self.pbuy=QDoubleSpinBox(); self.pbuy.setMaximum(1e9); self.psell=QDoubleSpinBox(); self.psell.setMaximum(1e9); self.pstock=QDoubleSpinBox(); self.pstock.setMaximum(1e9); self.plow=QDoubleSpinBox(); self.plow.setValue(5); self.plow.setMaximum(1e9)
         for label,field in [("Product",self.pname),("SKU",self.psku),("Purchase price",self.pbuy),("Selling price",self.psell),("Opening stock",self.pstock),("Low-stock alert",self.plow)]: f.addRow(label,field)
-        l.addLayout(f); b=QPushButton("Add product"); b.clicked.connect(self.save_product); l.addWidget(b); l.addWidget(QLabel("Product sales are recorded as customer credit and stock is reduced atomically. Use the Android app for camera scanning.")); self.tabs.addTab(w,"Inventory")
+        l.addLayout(f); b=QPushButton("Add product"); b.clicked.connect(self.save_product); l.addWidget(b)
+        sale=QGroupBox("Record a product sale"); sf=QFormLayout(sale); self.sale_customer=QComboBox(); self.sale_product=QComboBox(); self.sale_qty=QDoubleSpinBox(); self.sale_qty.setMinimum(0.001); self.sale_qty.setMaximum(1000000); self.sale_qty.setValue(1); self.sale_qty.setDecimals(3)
+        sf.addRow("Customer",self.sale_customer); sf.addRow("Product",self.sale_product); sf.addRow("Quantity",self.sale_qty); sale_btn=QPushButton("Record sale as customer credit"); sale_btn.clicked.connect(self.save_product_sale); sf.addRow(sale_btn); l.addWidget(sale)
+        l.addWidget(QLabel("A confirmed sale creates a customer credit entry and reduces stock in one SQLite transaction.")); self.tabs.addTab(w,"Inventory")
     def build_expenses(self):
         w=QWidget(); l=QVBoxLayout(w); self.exp_table=self.table(["Date","Category","Description","Amount"]); l.addWidget(self.exp_table)
         f=QFormLayout(); self.ecat=QComboBox(); self.ecat.addItems(["Rent","Utilities","Salary","Transport","Supplies","Other"]); self.edesc=QLineEdit(); self.eamount=QDoubleSpinBox(); self.eamount.setMaximum(1e9); self.eamount.setPrefix("Rs. "); f.addRow("Category",self.ecat); f.addRow("Description",self.edesc); f.addRow("Amount",self.eamount); l.addLayout(f); b=QPushButton("Record expense"); b.clicked.connect(self.save_expense); l.addWidget(b); self.tabs.addTab(w,"Expenses")
@@ -178,6 +181,12 @@ class Main(QMainWindow):
         for r in rows:
             i=self.customer_table.rowCount(); self.customer_table.insertRow(i)
             for c,v in enumerate([r["id"],r["name"],r["phone"],money(r["balance"])]): self.customer_table.setItem(i,c,QTableWidgetItem(str(v)))
+        if hasattr(self,"sale_customer"):
+            current=self.sale_customer.currentData(); self.sale_customer.clear()
+            for r in self.store.customers(): self.sale_customer.addItem(r["name"],r["id"])
+            if current is not None:
+                ix=self.sale_customer.findData(current)
+                if ix>=0:self.sale_customer.setCurrentIndex(ix)
         self.recent.setRowCount(0)
         for r in rows[:8]:
             i=self.recent.rowCount(); self.recent.insertRow(i)
@@ -199,6 +208,12 @@ class Main(QMainWindow):
             for c,v in enumerate([r["id"],r["name"],r["phone"],money(r["balance"])]): self.supplier_table.setItem(i,c,QTableWidgetItem(str(v)))
     def refresh_products(self):
         self.product_table.setRowCount(0)
+        if hasattr(self,"sale_product"):
+            current=self.sale_product.currentData(); self.sale_product.clear()
+            for p in self.store.products(): self.sale_product.addItem(p["name"],p["id"])
+            if current is not None:
+                ix=self.sale_product.findData(current)
+                if ix>=0:self.sale_product.setCurrentIndex(ix)
         for r in self.store.products():
             i=self.product_table.rowCount(); self.product_table.insertRow(i)
             for c,v in enumerate([r["id"],r["name"],r["sku"],money(r["purchase_price_paisa"]/100),money(r["selling_price_paisa"]/100),f'{r["stock_milli"]/1000:g}',f'{r["low_stock_milli"]/1000:g}']): self.product_table.setItem(i,c,QTableWidgetItem(str(v)))
@@ -248,6 +263,10 @@ class Main(QMainWindow):
     def save_product(self):
         if not self.pname.text().strip():return alert(self,"Enter product name.",True)
         self.run_action(lambda:(self.store.add_product(self.pname.text(),self.psku.text(),self.pbuy.value(),self.psell.value(),self.pstock.value(),self.plow.value()),self.refresh_products()))
+    def save_product_sale(self):
+        cid=self.sale_customer.currentData(); pid=self.sale_product.currentData()
+        if cid is None or pid is None:return alert(self,"Add at least one customer and one product first.",True)
+        self.run_action(lambda:(self.store.record_sale(int(cid),int(pid),self.sale_qty.value()),self.refresh_all(),alert(self,"Product sale recorded and stock updated.")))
     def save_expense(self):
         if self.eamount.value()<=0:return alert(self,"Enter an expense amount.",True)
         self.store.add_expense(self.ecat.currentText(),self.edesc.text(),self.eamount.value()); self.refresh_all()
