@@ -513,9 +513,11 @@ class Store:
         like = f"%{q}%"
         results: list[dict[str, Any]] = []
         for row in self.db.execute("""
-            SELECT id,name,phone FROM customers WHERE name LIKE ? OR phone LIKE ?
-            ORDER BY name LIMIT 25
-        """, (like, like)):
+            SELECT c.id,c.name,c.phone FROM customers c
+            LEFT JOIN customer_meta m ON m.customer_id=c.id
+            WHERE c.name LIKE ? OR c.phone LIKE ? OR m.tags LIKE ?
+            GROUP BY c.id ORDER BY c.name LIMIT 25
+        """, (like, like, like)):
             results.append({"type": "Customer", "id": row["id"], "title": row["name"], "detail": row["phone"]})
         for row in self.db.execute("SELECT id,name,sku FROM products WHERE name LIKE ? OR sku LIKE ? LIMIT 20",
                                    (like, like)):
