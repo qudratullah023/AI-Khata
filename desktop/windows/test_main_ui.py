@@ -41,18 +41,18 @@ class MainWindowSmokeTests(unittest.TestCase):
         self.window = MainWindow(self.store, "smoke", "Demonstration Shop", [self.shop])
         self.assertEqual(self.window.pages.currentIndex(), self.window.page_index["Dashboard"])
         self.assertEqual(self.window.pages.count(), 8)
-        self.assertTrue(self.window.nav_buttons["Customers"].isVisible())
-        self.assertTrue(self.window.nav_buttons["Reports"].isVisible())
+        self.assertFalse(self.window.nav_buttons["Customers"].isHidden())
+        self.assertFalse(self.window.nav_buttons["Reports"].isHidden())
 
     def test_staff_window_hides_owner_pages_and_cost_controls(self):
         self.store.add_customer("Ali", "03001234567")
         self.window = MainWindow(self.store, "smoke", "Demonstration Shop", [self.shop], staff_mode=True)
-        self.assertFalse(self.window.nav_buttons["Suppliers"].isVisible())
-        self.assertFalse(self.window.nav_buttons["Reports"].isVisible())
-        self.assertFalse(self.window.nav_buttons["Settings"].isVisible())
-        self.assertFalse(self.window.product_add_button.isVisible())
-        self.assertFalse(self.window.edit_entry_button.isVisible())
-        self.assertTrue(self.window.nav_buttons["Customers"].isVisible())
+        self.assertTrue(self.window.nav_buttons["Suppliers"].isHidden())
+        self.assertTrue(self.window.nav_buttons["Reports"].isHidden())
+        self.assertTrue(self.window.nav_buttons["Settings"].isHidden())
+        self.assertTrue(self.window.product_add_button.isHidden())
+        self.assertTrue(self.window.edit_entry_button.isHidden())
+        self.assertFalse(self.window.nav_buttons["Customers"].isHidden())
 
 
 if __name__ == "__main__":
