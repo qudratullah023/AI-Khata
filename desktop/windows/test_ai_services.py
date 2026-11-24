@@ -9,8 +9,9 @@ import ai_services
 
 class AiServiceTests(unittest.TestCase):
     def test_parse_json_accepts_markdown_fence(self):
-        self.assertEqual(ai_services._parse_json(' \`\`\`json\\n{"answer":"ok","draft":null}\\n\`\`\` '),
-                         {"answer": "ok", "draft": None})
+        fences = chr(96) * 3
+        sample = fences + "json" + chr(10) + '{"answer":"ok","draft":null}' + chr(10) + fences
+        self.assertEqual(ai_services._parse_json(sample), {"answer": "ok", "draft": None})
 
     def test_parse_json_rejects_non_json(self):
         with self.assertRaises(ValueError):
