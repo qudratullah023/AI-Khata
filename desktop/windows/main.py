@@ -1015,8 +1015,11 @@ class MainWindow(QMainWindow):
         if not accepted:
             return
         description = ask_text(self, "Ledger entry", "Description") or ""
+        entry_date = ask_text(self, "Ledger entry", "Date (YYYY-MM-DD)", default=iso_today())
+        if entry_date is None:
+            return
         try:
-            self.store.add_transaction(cid, kind, amount, description)
+            self.store.add_transaction(cid, kind, amount, description, entry_date)
             self.refresh_all()
             self.navigate("Customers")
         except Exception as exc:
@@ -1047,8 +1050,11 @@ class MainWindow(QMainWindow):
         desc = ask_text(self, "Edit entry", "Description", default=record["description"])
         if desc is None:
             return
+        entry_date = ask_text(self, "Edit entry", "Date (YYYY-MM-DD)", default=record["transaction_date"])
+        if entry_date is None:
+            return
         try:
-            self.store.edit_transaction(txid, kind.lower(), amount, desc, record["transaction_date"])
+            self.store.edit_transaction(txid, kind.lower(), amount, desc, entry_date)
             self.refresh_all()
         except Exception as exc:
             inform(self, str(exc), True)
@@ -1219,8 +1225,11 @@ class MainWindow(QMainWindow):
                              if row["name"].casefold() == name.casefold()), None)
             supplier_id = existing["id"] if existing else self.store.add_supplier(name, self.supplier_phone.text())
             if self.supplier_amount.value() > 0:
+                entry_date = ask_text(self, "Supplier entry", "Date (YYYY-MM-DD)", default=iso_today())
+                if entry_date is None:
+                    return
                 self.store.add_supplier_entry(supplier_id, self.supplier_type.currentData(),
-                    self.supplier_amount.value(), self.supplier_desc.text())
+                    self.supplier_amount.value(), self.supplier_desc.text(), entry_date)
             self.current_supplier_id = supplier_id
             self.supplier_amount.setValue(0)
             self.supplier_desc.clear()
@@ -1388,9 +1397,12 @@ class MainWindow(QMainWindow):
     def save_expense(self) -> None:
         if self.staff_mode:
             return
+        expense_date = ask_text(self, "New expense", "Date (YYYY-MM-DD)", default=iso_today())
+        if expense_date is None:
+            return
         try:
             self.store.add_expense(self.expense_category.currentText(),
-                self.expense_description.text(), self.expense_amount.value())
+                self.expense_description.text(), self.expense_amount.value(), expense_date)
             self.expense_description.clear()
             self.expense_amount.setValue(0)
             self.refresh_all()
