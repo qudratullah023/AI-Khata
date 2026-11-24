@@ -1883,7 +1883,14 @@ def start() -> int:
     shops = first_setup()
     if not shops:
         return 0
-    first = shops[0]
+    selected_shop = shops[0]
+    if len(shops) > 1:
+        labels = [f"{item['name']}  ·  {item['id'][:6]}" for item in shops]
+        selection, ok = QInputDialog.getItem(None, "Choose a shop", "Shop profile", labels, 0, False)
+        if not ok:
+            return 0
+        selected_shop = shops[labels.index(selection)]
+    first = selected_shop
     store = Store(first["path"])
     owner = store.db.execute("SELECT * FROM owner WHERE id=1").fetchone()
     if not owner:
