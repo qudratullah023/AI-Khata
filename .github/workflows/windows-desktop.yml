@@ -24,10 +24,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install PySide6 pyinstaller
-      - name: Compile-check application
-        run: python -m py_compile desktop/windows/main.py
+      - name: Compile-check and test application
+        run: |
+          python -m py_compile desktop/windows/main.py desktop/windows/test_store.py
+          python -m unittest discover -s desktop/windows -p "test_*.py" -v
       - name: Build standalone Windows executable
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name AI-Khata desktop/windows/main.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name AI-Khata --distpath desktop/windows/dist --workpath desktop/windows/build --specpath desktop/windows desktop/windows/main.py
       - name: Install Inno Setup
         uses: jrsoftware/setup-innosetup@v1
       - name: Build installable Windows setup EXE
