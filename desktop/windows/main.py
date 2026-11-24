@@ -1372,7 +1372,8 @@ class MainWindow(QMainWindow):
             inform(self, str(exc), True)
             return
         self.ai_question.clear()
-        self.ai_conversation.append(f"<p><b>You</b><br>{question}</p>")
+        from html import escape
+        self.ai_conversation.append(f"<p><b>You</b><br>{escape(question).replace(chr(10), '<br>')}</p>")
         self.ai_status.setText("Preparing an answer…")
         self.ai_ask_button.setEnabled(False)
         job = BackgroundJob(lambda: ask_bookkeeper(key, question, context, models))
@@ -1390,10 +1391,14 @@ class MainWindow(QMainWindow):
             return
         selected = context.get("customer") or {}
         customer_id = draft.get("customer_id") or selected.get("customer_id")
-        if customer_id is None or (selected and int(customer_id) != int(selected["customer_id"])):
+        try:
+            customer_id = int(customer_id) if customer_id is not None else None
+        except (TypeError, ValueError):
+            customer_id = None
+        if customer_id is None or (selected and customer_id != int(selected["customer_id"])):
             self.ai_conversation.append("<p><i>Draft not offered: select the customer whose ledger should receive the entry.</i></p>")
             return
-        customer = self.store.customer(int(customer_id))
+        customer = self.store.customer(customer_id)
         if not customer:
             return
         text = (f"Customer: {customer['name']}\nType: {draft['type']}\n"
@@ -1403,7 +1408,7 @@ class MainWindow(QMainWindow):
             try:
                 tx_date = draft.get("date") or iso_today()
                 datetime.strptime(tx_date, "%Y-%m-%d")
-                self.store.add_transaction(int(customer_id), draft["type"],
+                self.store.add_transaction(customer_id, draft["type"],
                     float(draft["amount"]), str(draft.get("description", "")), tx_date)
                 self.ai_conversation.append("<p><b>Saved:</b> The approved entry has been added to the selected ledger.</p>")
                 self.refresh_all()
