@@ -1,26 +1,33 @@
-# AI Khata for Windows
+# AI Khata Desktop for Windows
 
-Windows 10/11 desktop client. Build the installable setup executable with the
-**AI Khata Windows desktop build** GitHub Actions workflow.
+A standalone desktop program for Windows 10/11 x64. It uses a local SQLite database and does not need an Android app, web service or cloud account.
 
-## Build locally (Windows)
-1. Install Python 3.12.
-2. Run `python -m pip install PySide6 pyinstaller`.
-3. Run `pyinstaller --noconfirm --clean --onefile --windowed --name AI-Khata desktop/windows/main.py`.
-4. Install Inno Setup and run `iscc desktop/windows/installer.iss`.
-5. Installer output: `desktop/windows/dist/AI-Khata-Setup.exe`.
+## Build
 
-## Current desktop foundation
-- Local SQLite shop database and owner PIN protection.
-- Customer accounts, credit/payment entries, search, tags and notes.
-- Supplier Khata, inventory, stock-aware product sales, and expenses.
-- Daily summary, monthly expense snapshot, low-stock count.
-- JSON backup export, customer statement PDF, wallet reference settings.
-- Multiple isolated shop database profiles and staff PIN login.
+1. Install Python 3.12 on Windows.
+2. Run `python -m pip install -r desktop/windows/requirements.txt`.
+3. Run `python -m py_compile desktop/windows/*.py`.
+4. Run `python -m unittest discover -s desktop/windows -p "test_*.py" -v`.
+5. Build the executable with:
 
-The Windows client is an initial desktop implementation, not yet full parity with
-Android 3.2.0. In particular, Android backup import compatibility, full profit/loss
-reports, AI handwriting scan, scheduled Windows notifications, full staff permission
-audit, raw Bluetooth ESC/POS support, and Android home-screen widget equivalents
-remain follow-up work. Do not assume Android and Windows databases sync automatically:
-use verified cross-platform backup/restore once that feature is released.
+```powershell
+pyinstaller --noconfirm --clean --onefile --windowed --collect-all PySide6 --name AI-Khata --distpath desktop/windows/dist --workpath desktop/windows/build --specpath desktop/windows desktop/windows/main.py
+```
+
+6. Install Inno Setup and run `iscc desktop/windows/installer.iss`.
+
+The installer is written to `desktop/windows/dist/AI-Khata-Setup.exe`.
+
+## Included workflows
+
+Customer and supplier ledgers, credit and payment entries, profile tags and notes, consent-gated customer statements, inventory and stock-aware product sales, stock correction, expenses, monthly profit-and-loss estimates, universal search, multiple shop profiles, owner/staff PIN access, daily and overdue reminders, encrypted backup and restore, Windows printing, optional ESC/POS COM printing, quick actions, keyboard shortcuts, selectable themes, Gemini Bookkeeper and reviewed handwriting extraction.
+
+## Local data and security
+
+Data is stored under `%APPDATA%\AI Khata Desktop`. Each shop has a separate SQLite file. PINs use salted PBKDF2-HMAC-SHA256. AI API keys use Windows DPAPI. Exported backups are encrypted with Scrypt and AES-256-GCM. AI features are optional and require the owner to configure one or more API keys.
+
+Staff access is intentionally restricted: staff can create customers and record customer entries or product sales, but cannot edit or delete ledger records, change business settings, view profit reports, manage suppliers or use owner-only AI/data tools.
+
+## Validation
+
+The automated suite covers customer balances, transaction edits and deletion, product-sale stock handling, supplier balances, daily summaries, costing and profit estimates, oldest-first overdue allocation, universal search, encrypted backup restoration and SQLite integrity checks. Hardware-specific printer behaviour and Windows notification delivery still require testing on the actual target PC and printer.
