@@ -1,0 +1,58 @@
+name: AI Khata Windows desktop build
+
+on:
+  push:
+    branches: ["windows-desktop-standalone"]
+  pull_request:
+    branches: ["main", "next-gen-assistant-ux-cloud"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: desktop/windows/requirements.txt
+      - name: Install desktop dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r desktop/windows/requirements.txt
+      - name: Compile-check and test application
+        run: |
+          python -m py_compile desktop/windows/main.py desktop/windows/store.py desktop/windows/ai_services.py desktop/windows/test_store.py desktop/windows/test_ai_services.py desktop/windows/test_main_ui.py
+          python -m unittest discover -s desktop/windows -p "test_*.py" -v
+      - name: Build standalone Windows executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --collect-all PySide6 --name AI-Khata --distpath desktop/windows/dist --workpath desktop/windows/build --specpath desktop/windows desktop/windows/main.py
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Build installable Windows setup EXE
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { throw "Inno Setup compiler was not found at $compiler" }
+          & $compiler "desktop/windows/installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed with exit code $LASTEXITCODE" }
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $installer = "desktop/windows/dist/AI-Khata-Setup.exe"
+          if (!(Test-Path $installer)) { throw "Installer EXE was not created" }
+          if ((Get-Item $installer).Length -lt 5000000) { throw "Installer is unexpectedly small" }
+          Get-FileHash $installer -Algorithm SHA256
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-khata-windows-installer
+          path: desktop/windows/dist/AI-Khata-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
