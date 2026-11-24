@@ -28,7 +28,7 @@ jobs:
           python -m pip install -r desktop/windows/requirements.txt
       - name: Compile-check and test application
         run: |
-          python -m py_compile desktop/windows/main.py desktop/windows/store.py desktop/windows/ai_services.py desktop/windows/test_store.py
+          python -m py_compile desktop/windows/main.py desktop/windows/store.py desktop/windows/ai_services.py desktop/windows/test_store.py desktop/windows/test_ai_services.py
           python -m unittest discover -s desktop/windows -p "test_*.py" -v
       - name: Build standalone Windows executable
         run: pyinstaller --noconfirm --clean --onefile --windowed --collect-all PySide6 --name AI-Khata --distpath desktop/windows/dist --workpath desktop/windows/build --specpath desktop/windows desktop/windows/main.py
