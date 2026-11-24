@@ -35,6 +35,14 @@ The native Android project is in `android/`. It supports Android 6.0 and newer, 
 
 To build the APK, open GitHub → Actions → **AI Khata checks and Android APK**. The workflow runs the Python regression tests and builds the Android debug APK. The APK is uploaded as the `ai-khata-debug-apk` artifact.
 
+## Windows desktop version (in development)
+
+A Windows 10/11 desktop client is being added under `desktop/windows/`. It uses a local SQLite database and a PIN-protected shop profile. The Windows CI workflow is designed to package an installable `AI-Khata-Setup.exe` with Inno Setup.
+
+The first desktop milestone includes customer credit/payment ledgers, customer search and profile notes/tags, supplier accounts, inventory and stock-aware product sales, expenses, daily summaries, shop profiles, staff PIN login, wallet references, JSON backup export, and statement PDF/Windows printing.
+
+This is an initial Windows implementation, not yet complete Android feature parity. Android backup import compatibility, full profit/loss reporting, AI handwriting scan, scheduled Windows notifications, complete staff permission review, raw Bluetooth ESC/POS integration, and automatic Android↔Windows cloud sync are still pending. The Android app remains the primary full-featured version until those milestones are completed and tested.
+
 ## University project notes
 
 - Kotlin is used for the Android app screens and app behaviour.
