@@ -333,6 +333,25 @@ class Store:
             (supplier_id,),
         ).fetchall()
 
+    def edit_supplier_entry(self, entry_id: int, kind: str, amount: float,
+                            description: str, entry_date: str) -> None:
+        if kind not in ("payable", "payment"):
+            raise ValueError("Supplier entry type is invalid.")
+        entry_date = _valid_date(entry_date)
+        cur = self.db.execute("""
+            UPDATE supplier_entries SET entry_type=?,amount_paisa=?,description=?,entry_date=?
+            WHERE id=?
+        """, (kind, to_paisa(amount), description.strip(), entry_date, entry_id))
+        if not cur.rowcount:
+            raise ValueError("Supplier entry no longer exists.")
+        self.db.commit()
+
+    def delete_supplier_entry(self, entry_id: int) -> None:
+        cur = self.db.execute("DELETE FROM supplier_entries WHERE id=?", (entry_id,))
+        if not cur.rowcount:
+            raise ValueError("Supplier entry no longer exists.")
+        self.db.commit()
+
     # Inventory, sales and expenses
     def products(self, query: str = "") -> list[sqlite3.Row]:
         q = f"%{query.strip()}%"
@@ -432,8 +451,23 @@ class Store:
         self.db.commit()
         return int(cur.lastrowid)
 
+    def update_expense(self, expense_id: int, category: str, description: str,
+                       amount: float, expense_date: str) -> None:
+        if not category.strip():
+            raise ValueError("Expense category is required.")
+        expense_date = _valid_date(expense_date)
+        cur = self.db.execute("""
+            UPDATE expenses SET expense_date=?,category=?,description=?,amount_paisa=?
+            WHERE id=?
+        """, (expense_date, category.strip(), description.strip(), to_paisa(amount), expense_id))
+        if not cur.rowcount:
+            raise ValueError("Expense entry no longer exists.")
+        self.db.commit()
+
     def delete_expense(self, expense_id: int) -> None:
-        self.db.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+        cur = self.db.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+        if not cur.rowcount:
+            raise ValueError("Expense entry no longer exists.")
         self.db.commit()
 
     # Reporting, search and integrity
