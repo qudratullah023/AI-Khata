@@ -89,6 +89,24 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(report["expenses_paisa"], 10000)
         self.assertEqual(report["net_estimate_paisa"], 30000)
 
+    def test_supplier_entry_can_be_corrected_and_deleted(self):
+        supplier_id = self.store.add_supplier("Mill Store", "03001112222")
+        entry_id = self.store.add_supplier_entry(supplier_id, "payable", 900, "Wheat")
+        self.store.edit_supplier_entry(entry_id, "payment", 450, "Partial settlement",
+                                       date.today().isoformat())
+        self.assertEqual(self.store.suppliers()[0]["balance_paisa"], -45000)
+        self.store.delete_supplier_entry(entry_id)
+        self.assertEqual(self.store.suppliers()[0]["balance_paisa"], 0)
+
+    def test_expense_can_be_corrected_and_deleted(self):
+        expense_id = self.store.add_expense("Rent", "Old amount", 100)
+        self.store.update_expense(expense_id, "Utilities", "Electricity", 250,
+                                  date.today().isoformat())
+        self.assertEqual(self.store.expenses()[0]["amount_paisa"], 25000)
+        self.assertEqual(self.store.expenses()[0]["category"], "Utilities")
+        self.store.delete_expense(expense_id)
+        self.assertEqual(self.store.expenses(), [])
+
     def test_overdue_allocation_uses_oldest_unpaid_credit(self):
         old = (date.today() - timedelta(days=45)).isoformat()
         self.store.add_transaction(self.customer_id, "credit", 800, "Old invoice", old)
