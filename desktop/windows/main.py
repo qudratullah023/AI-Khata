@@ -173,6 +173,7 @@ class MainWindow(QMainWindow):
         self.staff_mode = staff_mode
         self.pool = QThreadPool.globalInstance()
         self.current_customer_id: int | None = None
+        self.current_supplier_id: int | None = None
         self.setWindowTitle(f"{APP_NAME}  |  {shop_name}")
         self.setMinimumSize(1120, 720)
         self.resize(1360, 860)
@@ -426,7 +427,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("Track amounts owed to suppliers and payments made."))
         self.supplier_table = self._table(["ID", "Supplier", "Phone", "Balance payable"])
         self.supplier_table.setColumnHidden(0, True)
-        layout.addWidget(self.supplier_table, 1)
+        self.supplier_table.itemSelectionChanged.connect(self.refresh_supplier_entries)
+        layout.addWidget(self.supplier_table, 2)
+        history = QGroupBox("Selected supplier account history")
+        history_layout = QVBoxLayout(history)
+        self.supplier_ledger_table = self._table(["ID", "Date", "Entry", "Description", "Amount"])
+        self.supplier_ledger_table.setColumnHidden(0, True)
+        history_layout.addWidget(self.supplier_ledger_table)
+        history_actions = QHBoxLayout()
+        history_actions.addWidget(self._button("Edit selected entry", self.edit_supplier_entry))
+        history_actions.addWidget(self._button("Delete selected entry", self.delete_supplier_entry))
+        history_layout.addLayout(history_actions)
+        layout.addWidget(history, 2)
         form = QGroupBox("New supplier / account entry")
         f = QFormLayout(form)
         self.supplier_name = QLineEdit()
@@ -495,6 +507,7 @@ class MainWindow(QMainWindow):
         f.addRow("Amount", self.expense_amount)
         buttons = QHBoxLayout()
         buttons.addWidget(self._button("Save expense", self.save_expense, True))
+        buttons.addWidget(self._button("Edit selected", self.edit_expense))
         buttons.addWidget(self._button("Delete selected", self.delete_expense))
         f.addRow(buttons)
         layout.addWidget(form)
@@ -818,11 +831,44 @@ class MainWindow(QMainWindow):
             return
         rows = self.store.suppliers()
         self.supplier_table.setRowCount(0)
+        selected_row = -1
         for row in rows:
             idx = self.supplier_table.rowCount()
             self.supplier_table.insertRow(idx)
             for col, value in enumerate([row["id"], row["name"], row["phone"], money(row["balance_paisa"])]):
                 self.supplier_table.setItem(idx, col, QTableWidgetItem(str(value)))
+            if row["id"] == self.current_supplier_id:
+                selected_row = idx
+        if selected_row < 0 and rows:
+            selected_row = 0
+        if selected_row >= 0:
+            self.supplier_table.selectRow(selected_row)
+        else:
+            self.current_supplier_id = None
+            if hasattr(self, "supplier_ledger_table"):
+                self.supplier_ledger_table.setRowCount(0)
+
+    def refresh_supplier_entries(self) -> None:
+        if not hasattr(self, "supplier_ledger_table"):
+            return
+        row = self.supplier_table.currentRow()
+        self.supplier_ledger_table.setRowCount(0)
+        if row < 0:
+            self.current_supplier_id = None
+            return
+        self.current_supplier_id = int(self.supplier_table.item(row, 0).text())
+        supplier = self.store.db.execute("SELECT name,phone FROM suppliers WHERE id=?",
+                                         (self.current_supplier_id,)).fetchone()
+        if supplier:
+            self.supplier_name.setText(supplier["name"])
+            self.supplier_phone.setText(supplier["phone"])
+        for entry in self.store.supplier_transactions(self.current_supplier_id):
+            idx = self.supplier_ledger_table.rowCount()
+            self.supplier_ledger_table.insertRow(idx)
+            values = [entry["id"], entry["entry_date"], entry["entry_type"].title(),
+                      entry["description"], money(entry["amount_paisa"])]
+            for col, value in enumerate(values):
+                self.supplier_ledger_table.setItem(idx, col, QTableWidgetItem(str(value)))
 
     def refresh_products(self) -> None:
         if not hasattr(self, "product_table"):
@@ -1175,13 +1221,58 @@ class MainWindow(QMainWindow):
             if self.supplier_amount.value() > 0:
                 self.store.add_supplier_entry(supplier_id, self.supplier_type.currentData(),
                     self.supplier_amount.value(), self.supplier_desc.text())
-            self.supplier_name.clear()
-            self.supplier_phone.clear()
+            self.current_supplier_id = supplier_id
             self.supplier_amount.setValue(0)
             self.supplier_desc.clear()
             self.refresh_all()
         except Exception as exc:
             inform(self, str(exc), True)
+
+    def edit_supplier_entry(self) -> None:
+        if self.staff_mode:
+            return
+        row = self.supplier_ledger_table.currentRow()
+        if row < 0:
+            inform(self, "Select a supplier entry first.")
+            return
+        entry_id = int(self.supplier_ledger_table.item(row, 0).text())
+        record = self.store.db.execute("SELECT * FROM supplier_entries WHERE id=?", (entry_id,)).fetchone()
+        if not record:
+            return
+        kind, ok = QInputDialog.getItem(self, "Edit supplier entry", "Entry type",
+            ["Payable", "Payment"], 0 if record["entry_type"] == "payable" else 1, False)
+        if not ok:
+            return
+        amount, ok = QInputDialog.getDouble(self, "Edit supplier entry", "Amount (Rs.)",
+            record["amount_paisa"] / 100, 0.01, 100_000_000, 2)
+        if not ok:
+            return
+        description = ask_text(self, "Edit supplier entry", "Description", default=record["description"])
+        if description is None:
+            return
+        entry_date = ask_text(self, "Edit supplier entry", "Date (YYYY-MM-DD)", default=record["entry_date"])
+        if entry_date is None:
+            return
+        try:
+            self.store.edit_supplier_entry(entry_id, kind.lower(), amount, description, entry_date)
+            self.refresh_all()
+        except Exception as exc:
+            inform(self, str(exc), True)
+
+    def delete_supplier_entry(self) -> None:
+        if self.staff_mode:
+            return
+        row = self.supplier_ledger_table.currentRow()
+        if row < 0:
+            inform(self, "Select a supplier entry first.")
+            return
+        entry_id = int(self.supplier_ledger_table.item(row, 0).text())
+        if confirm(self, "Delete this supplier account entry?"):
+            try:
+                self.store.delete_supplier_entry(entry_id)
+                self.refresh_all()
+            except Exception as exc:
+                inform(self, str(exc), True)
 
     def _selected_product(self) -> int | None:
         row = self.product_table.currentRow()
@@ -1302,6 +1393,38 @@ class MainWindow(QMainWindow):
                 self.expense_description.text(), self.expense_amount.value())
             self.expense_description.clear()
             self.expense_amount.setValue(0)
+            self.refresh_all()
+        except Exception as exc:
+            inform(self, str(exc), True)
+
+    def edit_expense(self) -> None:
+        if self.staff_mode:
+            return
+        row = self.expense_table.currentRow()
+        if row < 0:
+            inform(self, "Select an expense first.")
+            return
+        expense_id = int(self.expense_table.item(row, 0).text())
+        record = self.store.db.execute("SELECT * FROM expenses WHERE id=?", (expense_id,)).fetchone()
+        if not record:
+            return
+        categories = ["Rent", "Utilities", "Salary", "Transport", "Supplies", "Repairs", "Other"]
+        category, ok = QInputDialog.getItem(self, "Edit expense", "Category", categories,
+            max(0, categories.index(record["category"])) if record["category"] in categories else 0, False)
+        if not ok:
+            return
+        amount, ok = QInputDialog.getDouble(self, "Edit expense", "Amount (Rs.)",
+            record["amount_paisa"] / 100, 0.01, 100_000_000, 2)
+        if not ok:
+            return
+        description = ask_text(self, "Edit expense", "Description", default=record["description"])
+        if description is None:
+            return
+        expense_date = ask_text(self, "Edit expense", "Date (YYYY-MM-DD)", default=record["expense_date"])
+        if expense_date is None:
+            return
+        try:
+            self.store.update_expense(expense_id, category, description, amount, expense_date)
             self.refresh_all()
         except Exception as exc:
             inform(self, str(exc), True)
