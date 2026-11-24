@@ -44,10 +44,20 @@ def iso_today() -> str:
 
 
 def to_paisa(amount: float | int) -> int:
-    value = round(float(amount) * 100)
-    if value <= 0:
-        raise ValueError("Amount must be greater than zero.")
-    return value
+    try:
+        numeric = float(amount)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid monetary amount.") from exc
+    if not 0 < numeric <= 1_000_000_000:
+        raise ValueError("Amount must be greater than zero and within the supported limit.")
+    return round(numeric * 100)
+
+
+def _valid_date(value: str) -> str:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Date must use YYYY-MM-DD format.") from exc
 
 
 def _derive_key(password: str, salt: bytes) -> bytes:
@@ -238,11 +248,12 @@ class Store:
             raise ValueError("Transaction type must be credit or payment.")
         if not self.customer(customer_id):
             raise ValueError("Select a valid customer.")
+        entry_date = _valid_date(transaction_date or iso_today())
         cur = self.db.execute("""
             INSERT INTO transactions(customer_id,transaction_date,transaction_type,
                 description,amount_paisa,created_at)
             VALUES(?,?,?,?,?,?)
-        """, (customer_id, transaction_date or iso_today(), kind, description.strip(),
+        """, (customer_id, entry_date, kind, description.strip(),
               to_paisa(amount), datetime.now().isoformat(timespec="seconds")))
         self.db.commit()
         return int(cur.lastrowid)
@@ -251,8 +262,7 @@ class Store:
                           description: str, transaction_date: str) -> None:
         if kind not in ("credit", "payment"):
             raise ValueError("Transaction type must be credit or payment.")
-        if not transaction_date:
-            raise ValueError("Transaction date is required.")
+        transaction_date = _valid_date(transaction_date)
         cur = self.db.execute("""
             UPDATE transactions SET transaction_type=?,amount_paisa=?,description=?,transaction_date=?
             WHERE id=? AND product_id IS NULL
@@ -308,10 +318,11 @@ class Store:
             raise ValueError("Entry must be payable or payment.")
         if not self.db.execute("SELECT 1 FROM suppliers WHERE id=?", (supplier_id,)).fetchone():
             raise ValueError("Supplier no longer exists.")
+        entry_date = _valid_date(entry_date or iso_today())
         cur = self.db.execute("""
             INSERT INTO supplier_entries(supplier_id,entry_date,entry_type,description,amount_paisa,created_at)
             VALUES(?,?,?,?,?,?)
-        """, (supplier_id, entry_date or iso_today(), kind, description.strip(), to_paisa(amount),
+        """, (supplier_id, entry_date, kind, description.strip(), to_paisa(amount),
               datetime.now().isoformat(timespec="seconds")))
         self.db.commit()
         return int(cur.lastrowid)
@@ -412,10 +423,11 @@ class Store:
                     expense_date: str | None = None) -> int:
         if not category.strip():
             raise ValueError("Expense category is required.")
+        expense_date = _valid_date(expense_date or iso_today())
         cur = self.db.execute("""
             INSERT INTO expenses(expense_date,category,description,amount_paisa,created_at)
             VALUES(?,?,?,?,?)
-        """, (expense_date or iso_today(), category.strip(), description.strip(), to_paisa(amount),
+        """, (expense_date, category.strip(), description.strip(), to_paisa(amount),
               datetime.now().isoformat(timespec="seconds")))
         self.db.commit()
         return int(cur.lastrowid)
@@ -564,7 +576,10 @@ class Store:
         Path(path).write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
     def restore_backup(self, path: str | Path, password: str) -> None:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        backup_path = Path(path)
+        if not backup_path.is_file() or backup_path.stat().st_size > 64 * 1024 * 1024:
+            raise ValueError("Backup file is missing or exceeds the 64 MB size limit.")
+        raw = json.loads(backup_path.read_text(encoding="utf-8"))
         if raw.get("magic") != BACKUP_MAGIC or raw.get("version") != BACKUP_VERSION:
             raise ValueError("This file is not a supported AI Khata Desktop backup.")
         try:
